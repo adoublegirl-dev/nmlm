@@ -1,0 +1,89 @@
+/* 牛马联盟主题：暗色 + 淡金强调 + 浅绿辅助，毛玻璃质感 */
+:root {
+  --bg-deep: #1a1d23;
+  --bg-panel: rgba(255, 255, 255, 0.07);
+  --bg-panel-solid: #242830;
+  --bg-hover: rgba(255, 255, 255, 0.12);
+  --text-main: #efede8;
+  --text-dim: #a29b90;
+  --gold: #e0bc72;
+  --gold-dim: rgba(224, 188, 114, 0.16);
+  --green: #8fb8a0;
+  --danger: #d06a5c;
+  --border: rgba(255, 255, 255, 0.12);
+  --radius: 8px;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  font-family: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg-deep);
+  color: var(--text-main);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+body.transparent {
+  background: transparent;
+}
+
+/* ---------- 通用组件 ---------- */
+.card {
+  background: var(--bg-panel);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  backdrop-filter: blur(10px);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-main);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+.btn:hover { background: var(--bg-hover); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn.primary {
+  background: var(--gold-dim);
+  border-color: rgba(212, 175, 106, 0.4);
+  color: var(--gold);
+}
+.btn.danger { color: var(--danger); }
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.input {
+  background: var(--bg-panel-solid);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-main);
+  padding: 8px 10px;
+  font-size: 13px;
+  outline: none;
+  width: 100%;
+}
+.input:focus { border-color: var(--gold); }
+
+.muted { color: var(--text-dim); }
+.num { font-variant-numeric: tabular-nums; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+::-webkit-scrollbar-track { background: transparent; }

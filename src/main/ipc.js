@@ -1,0 +1,144 @@
+// IPC 枢纽：handlers 注册表 + 事件推送。HTTP server 复用同一注册表。
+const { ipcMain, BrowserWindow, shell, app } = require('electron')
+const { IPC, EVENTS } = require('../shared/constants')
+const settings = require('./services/settings')
+const shortcut = require('./services/shortcut')
+const ledger = require('./services/ledger')
+const evidence = require('./services/evidence')
+const report = require('./services/report')
+const tools = require('./services/tools')
+const activity = require('./services/activity')
+const windows = require('./windows')
+const { tagsRepo, packsRepo, settingsRepo } = require('./db')
+const { DEFAULT_SETTINGS } = require('../shared/constants')
+
+const HANDLERS = {}
+
+function registerHandler(channel, fn) {
+  HANDLERS[channel] = fn
+}
+
+// 供 HTTP server 调用的统一入口
+async function call(channel, args = {}) {
+  const fn = HANDLERS[channel]
+  if (!fn) return { ok: false, error: `未知通道: ${channel}` }
+  try {
+    return await fn(args)
+  } catch (e) {
+    return { ok: false, error: e.message || String(e) }
+  }
+}
+
+// ---------- 事件推送（main → 所有渲染窗口） ----------
+function broadcast(event, payload) {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send(event, payload)
+  }
+}
+
+function wireServiceEmitters() {
+  ledger.attachEventSender((data) => broadcast(EVENTS.LEDGER_STATE_CHANGED, data))
+  evidence.attachEventSender((event, payload) => broadcast(event, payload))
+  activity.attachEventSender((event, payload) => broadcast(event, payload))
+  settings.attachEventSender((data) => broadcast(EVENTS.SETTINGS_CHANGED, data))
+}
+
+// ---------- 通道实现 ----------
+function registerAll() {
+  // ledger
+  registerHandler(IPC.LEDGER_START, () => ledger.start())
+  registerHandler(IPC.LEDGER_STOP, (a) => ledger.stop(a))
+  registerHandler(IPC.LEDGER_PAUSE, () => ledger.pause())
+  registerHandler(IPC.LEDGER_CURRENT, () => ({ ok: true, entry: ledger.current() }))
+  registerHandler(IPC.LEDGER_LIST, (a) => ({ ok: true, entries: ledger.listByRange(a.start, a.end) }))
+  registerHandler(IPC.LEDGER_RECOVER, () => ({ ok: true, recovered: ledger.recover() }))
+  registerHandler(IPC.LEDGER_RETAG, (a) => ledger.retag(a.id, a))
+
+  // tags
+  registerHandler(IPC.TAGS_LIST, () => ({ ok: true, tags: tagsRepo.all() }))
+  registerHandler(IPC.TAGS_CREATE, (a) => ({ ok: true, tag: tagsRepo.create(a) }))
+  registerHandler(IPC.TAGS_UPDATE, (a) => ({ ok: true, tag: tagsRepo.update(a.id, a) }))
+  registerHandler(IPC.TAGS_DELETE, (a) => ({ ok: true, removed: tagsRepo.remove(a.id) }))
+
+  // evidence
+  registerHandler(IPC.EVIDENCE_CAPTURE, () => evidence.capture())
+  registerHandler(IPC.EVIDENCE_LIST, (a) => ({ ok: true, screenshots: evidence.listByRange(a.start, a.end) }))
+  registerHandler(IPC.EVIDENCE_PACK, (a) => evidence.pack(a))
+  registerHandler(IPC.EVIDENCE_PACK_STATUS, () => ({ ok: true, ...evidence.packStatus() }))
+
+  // report
+  registerHandler(IPC.REPORT_DAILY_TIMELINE, (a) => ({ ok: true, segments: report.dailyTimeline(a.date) }))
+  registerHandler(IPC.REPORT_TAG_DISTRIBUTION, (a) => ({ ok: true, data: report.tagDistribution(a.start, a.end) }))
+  registerHandler(IPC.REPORT_DAILY_TREND, (a) => ({ ok: true, data: report.dailyTrend(a.month) }))
+  registerHandler(IPC.REPORT_EFFECTIVE_HOURS, (a) => ({ ok: true, sec: report.effectiveHours(a.date) }))
+
+  // model（P2 占位）
+  registerHandler('model:generateReport', () => ({ ok: false, error: '模型接入将在 P2 实现' }))
+
+  // tools
+  registerHandler(IPC.TOOLS_LIST, () => ({ ok: true, tools: tools.list() }))
+  registerHandler(IPC.TOOLS_OPEN, (a) => tools.open(a.id))
+  registerHandler(IPC.TOOLS_CREATE, (a) => tools.create(a))
+  registerHandler(IPC.TOOLS_UPDATE, (a) => tools.update(a.id, a))
+  registerHandler(IPC.TOOLS_DELETE, (a) => tools.remove(a.id))
+
+  // settings
+  registerHandler(IPC.SETTINGS_GET_ALL, () => ({ ok: true, settings: settings.getAll() }))
+  registerHandler(IPC.SETTINGS_SET, (a) => ({ ok: true, value: settings.set(a.key, a.value) }))
+
+  // server
+  registerHandler(IPC.SERVER_INFO, () => {
+    const s = settings.getAll()
+    return { ok: true, port: s.server.port, token: s.server.token, urls: s.server.urls, userData: app.getPath('userData') }
+  })
+  registerHandler(IPC.SERVER_OPEN_BROWSER, () => {
+    const s = settings.getAll()
+    shell.openExternal(`http://127.0.0.1:${s.server.port}`)
+    return { ok: true }
+  })
+
+  // app
+  registerHandler(IPC.APP_OPEN_SCREENSHOTS_DIR, () => evidence.openScreenshotsDir())
+  registerHandler(IPC.APP_QUIT, () => {
+    app.quit()
+    return { ok: true }
+  })
+
+  // mini
+  registerHandler(IPC.MINI_HIDE, () => {
+    windows.hideMiniToTray(true)
+    return { ok: true }
+  })
+  registerHandler(IPC.MINI_SET_POS, (a) => {
+    windows.setMiniPos(a.x, a.y)
+    return { ok: true }
+  })
+  registerHandler(IPC.MINI_RESIZE, (a) => {
+    windows.resizeMini(a.width, a.height)
+    return { ok: true }
+  })
+
+  // tagpicker
+  registerHandler(IPC.TAGPICKER_CANCEL, () => {
+    windows.closeTagPicker()
+    return { ok: true }
+  })
+  registerHandler(IPC.TAGPICKER_CONFIRM, (a) => {
+    const r = ledger.retag(Number(a.entryId), a)
+    if (r.ok) windows.closeTagPicker()
+    return r
+  })
+
+  // 绑定 ipcMain
+  for (const [channel, fn] of Object.entries(HANDLERS)) {
+    ipcMain.handle(channel, async (_e, args) => {
+      try {
+        return await fn(args || {})
+      } catch (err) {
+        return { ok: false, error: err.message || String(err) }
+      }
+    })
+  }
+}
+
+module.exports = { registerAll, call, broadcast, wireServiceEmitters, HANDLERS }

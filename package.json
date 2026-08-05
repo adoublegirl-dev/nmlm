@@ -1,0 +1,35 @@
+{
+  "name": "niuma-panel",
+  "productName": "牛马联盟",
+  "version": "0.1.0",
+  "description": "打工人时间台账与加班证据记录仪",
+  "main": "src/main/index.js",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron .",
+    "predev": "npm run rebuild",
+    "dev:renderer": "vite",
+    "build:renderer": "vite build",
+    "start": "npm run build:renderer && electron .",
+    "prestart": "npm run rebuild",
+    "test": "npm run rebuild:node && vitest run",
+    "test:watch": "npm run rebuild:node && vitest",
+    "rebuild": "cd node_modules/better-sqlite3 && prebuild-install -r electron -t 31.7.7",
+    "rebuild:node": "cd node_modules/better-sqlite3 && prebuild-install",
+    "dist": "npm run build:renderer && electron-builder"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.5",
+    "echarts": "^5.5.1",
+    "electron": "^31.3.0",
+    "electron-builder": "^24.13.3",
+    "electron-rebuild": "^3.2.9",
+    "vite": "^5.3.5",
+    "vitest": "^2.0.5",
+    "vue": "^3.4.38"
+  }
+}

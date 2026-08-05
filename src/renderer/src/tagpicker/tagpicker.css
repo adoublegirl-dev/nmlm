@@ -1,0 +1,39 @@
+/* TagPicker 样式 */
+html, body { background: transparent !important; overflow: hidden; }
+body { margin: 0; }
+.tp {
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(24, 26, 31, 0.97);
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  color: var(--text-main);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tp-title { font-size: 14px; font-weight: 500; }
+.tp-tags { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.tp-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 0.5px solid var(--border);
+  background: color-mix(in srgb, var(--c) 12%, transparent);
+  color: var(--text-main);
+  font-size: 13px;
+  cursor: pointer;
+}
+.tp-tag:hover { background: color-mix(in srgb, var(--c) 24%, transparent); }
+.tp-tag .k {
+  width: 18px; height: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--c) 30%, transparent);
+  color: var(--c);
+  font-size: 11px;
+}
+.tp-input { font-size: 13px; }
+.tp-foot { font-size: 11px; }

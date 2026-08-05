@@ -1,0 +1,19 @@
+appId: com.niuma.panel
+productName: 牛马联盟
+directories:
+  output: release
+files:
+  - dist/**
+  - src/main/**
+  - src/preload/**
+  - src/shared/**
+  - package.json
+asar: true
+win:
+  target:
+    - portable
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/
