@@ -10,7 +10,7 @@ const report = require('../src/main/services/report')
 const todos = require('../src/main/services/todos')
 const { startOfDay, endOfDay, formatDuration, dayRange } = require('../src/main/utils/time')
 
-const { entriesRepo } = db
+const { entriesRepo, pausePointsRepo } = db
 
 // 每个用例用独立内存库；窗口采集替换为空实现（避免真调 PowerShell 与缓存干扰）
 beforeEach(() => {
@@ -109,6 +109,48 @@ describe('ledger 状态机', () => {
     const points = ledger.listPausePointsByRange(r.entry.start_time - 1, Date.now() + 1000)
     expect(points.length).toBe(1)
     expect(points[0].detail).toBe('被打断')
+  })
+
+  it('暂停点选择不同标签后拆分记录，并保留连续同标签合并规则', () => {
+    const base = 1786300000000
+    const entry = entriesRepo.insertFinished({
+      startTime: base,
+      endTime: base + 30 * 60 * 1000,
+      durationSec: 30 * 60,
+      tagId: 1,
+      detail: '长任务',
+      windowTitle: null,
+      isFragment: 0
+    })
+    const p1 = pausePointsRepo.insert({ entryId: entry.id, ts: base + 10 * 60 * 1000 })
+    pausePointsRepo.insert({ entryId: entry.id, ts: base + 20 * 60 * 1000 })
+    const r = ledger.applyPausePointTag({ entryId: entry.id, pointId: p1.id, tagId: 2 })
+    expect(r.ok).toBe(true)
+    expect(r.split).toBe(true)
+    const rows = entriesRepo.listByRange(base - 1, base + 31 * 60 * 1000)
+    expect(rows.map((x) => x.tag_id)).toEqual([1, 2, 1])
+    expect(rows.map((x) => x.duration_sec)).toEqual([600, 600, 600])
+  })
+
+  it('暂停点选择同标签后合并为一条记录', () => {
+    const base = 1786300000000
+    const entry = entriesRepo.insertFinished({
+      startTime: base,
+      endTime: base + 30 * 60 * 1000,
+      durationSec: 30 * 60,
+      tagId: 1,
+      detail: '长任务',
+      windowTitle: null,
+      isFragment: 0
+    })
+    const p1 = pausePointsRepo.insert({ entryId: entry.id, ts: base + 10 * 60 * 1000 })
+    const r = ledger.applyPausePointTag({ entryId: entry.id, pointId: p1.id, tagId: 1 })
+    expect(r.ok).toBe(true)
+    expect(r.split).toBe(false)
+    const rows = entriesRepo.listByRange(base - 1, base + 31 * 60 * 1000)
+    expect(rows.length).toBe(1)
+    expect(rows[0].duration_sec).toBe(1800)
+    expect(pausePointsRepo.listByEntry(entry.id).length).toBe(0)
   })
 })
 

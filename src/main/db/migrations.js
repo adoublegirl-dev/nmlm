@@ -103,6 +103,14 @@ const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status);
       CREATE INDEX IF NOT EXISTS idx_todos_due ON todos(due_at);
     `
+  },
+  {
+    version: 3,
+    name: 'pause-point-tagging',
+    sql: `
+      ALTER TABLE pause_points ADD COLUMN tag_id INTEGER REFERENCES tags(id);
+      CREATE INDEX IF NOT EXISTS idx_pause_tag ON pause_points(tag_id);
+    `
   }
 ]
 

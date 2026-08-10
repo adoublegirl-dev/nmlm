@@ -69,6 +69,12 @@ const entriesRepo = {
       .run(startTime, tagId, detail, windowTitle, Date.now())
     return this.get(info.lastInsertRowid)
   },
+  insertFinished({ startTime, endTime, durationSec, tagId = null, detail = null, windowTitle = null, isFragment = 0, createdAt = Date.now() }) {
+    const info = getDb()
+      .prepare('INSERT INTO time_entries (start_time, end_time, duration_sec, tag_id, detail, window_title, is_fragment, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(startTime, endTime, durationSec, tagId, detail, windowTitle, isFragment, createdAt)
+    return this.get(info.lastInsertRowid)
+  },
   get(id) {
     return getDb().prepare('SELECT * FROM time_entries WHERE id = ?').get(id)
   },
@@ -93,15 +99,19 @@ const entriesRepo = {
       .prepare('UPDATE time_entries SET tag_id = ?, detail = ? WHERE id = ?')
       .run(tagId, detail, id)
     return this.get(id)
+  },
+  remove(id) {
+    getDb().prepare('DELETE FROM time_entries WHERE id = ?').run(id)
+    return { ok: true }
   }
 }
 
 // ---------- 暂停点仓储 ----------
 const pausePointsRepo = {
-  insert({ entryId = null, ts = Date.now(), detail = null }) {
+  insert({ entryId = null, ts = Date.now(), detail = null, tagId = null }) {
     const info = getDb()
-      .prepare('INSERT INTO pause_points (entry_id, ts, detail, created_at) VALUES (?, ?, ?, ?)')
-      .run(entryId, ts, detail, Date.now())
+      .prepare('INSERT INTO pause_points (entry_id, ts, detail, tag_id, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(entryId, ts, detail, tagId, Date.now())
     return this.get(info.lastInsertRowid)
   },
   get(id) {
@@ -112,6 +122,14 @@ const pausePointsRepo = {
   },
   listByRange(start, end) {
     return getDb().prepare('SELECT * FROM pause_points WHERE ts >= ? AND ts < ? ORDER BY ts').all(start, end)
+  },
+  updateTag(id, tagId = null) {
+    getDb().prepare('UPDATE pause_points SET tag_id = ? WHERE id = ?').run(tagId, id)
+    return this.get(id)
+  },
+  removeByEntry(entryId) {
+    getDb().prepare('DELETE FROM pause_points WHERE entry_id = ?').run(entryId)
+    return { ok: true }
   }
 }
 

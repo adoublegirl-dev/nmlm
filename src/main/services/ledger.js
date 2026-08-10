@@ -1,5 +1,5 @@
 // 台账状态机：兼容旧 start/stop，同时支持任务播放器 switchTask / complete / pausePoint。
-const { entriesRepo, tagsRepo, pausePointsRepo } = require('../db')
+const { getDb, entriesRepo, tagsRepo, pausePointsRepo } = require('../db')
 const { FRAGMENT_THRESHOLD_SEC } = require('../../shared/constants')
 const winUtil = require('../utils/window')
 
@@ -104,6 +104,82 @@ function addPausePoint({ detail = null } = {}) {
 function listPausePointsByRange(start, end) { return pausePointsRepo.listByRange(start, end) }
 function listByRange(start, end) { return entriesRepo.listByRange(start, end) }
 
+function applyPausePointTag({ entryId, pointId, tagId = null } = {}) {
+  const entry = entriesRepo.get(entryId)
+  if (!entry) return { ok: false, error: '记录不存在' }
+  if (!entry.end_time) return { ok: false, error: '进行中的记录暂不支持拆分' }
+  const point = pausePointsRepo.get(pointId)
+  if (!point || point.entry_id !== entry.id) return { ok: false, error: '暂停点不存在' }
+  const finalTagId = validTagId(tagId)
+  if (tagId != null && finalTagId == null) return { ok: false, error: '标签不存在' }
+
+  const tx = getDb().transaction(() => {
+    pausePointsRepo.updateTag(pointId, finalTagId)
+    const points = pausePointsRepo
+      .listByEntry(entry.id)
+      .filter((p) => p.ts > entry.start_time && p.ts < entry.end_time)
+      .sort((a, b) => a.ts - b.ts)
+
+    const rawSegments = []
+    let cursor = entry.start_time
+    let currentTag = entry.tag_id
+    for (const p of points) {
+      if (p.ts > cursor) rawSegments.push({ start: cursor, end: p.ts, tagId: currentTag })
+      cursor = p.ts
+      currentTag = p.tag_id == null ? entry.tag_id : p.tag_id
+    }
+    if (entry.end_time > cursor) rawSegments.push({ start: cursor, end: entry.end_time, tagId: currentTag })
+
+    const merged = []
+    for (const s of rawSegments) {
+      if (s.end <= s.start) continue
+      const last = merged[merged.length - 1]
+      if (last && last.tagId === s.tagId) last.end = s.end
+      else merged.push({ ...s })
+    }
+
+    if (!merged.length) return { entries: [entry], split: false }
+
+    pausePointsRepo.removeByEntry(entry.id)
+    const created = []
+    const writeSegment = (baseId, s) => {
+      const durationSec = Math.max(0, Math.floor((s.end - s.start) / 1000))
+      const isFragment = durationSec < FRAGMENT_THRESHOLD_SEC ? 1 : 0
+      if (baseId) {
+        return entriesRepo.finish(baseId, {
+          endTime: s.end,
+          durationSec,
+          tagId: s.tagId,
+          detail: entry.detail,
+          windowTitle: entry.window_title,
+          isFragment
+        })
+      }
+      return entriesRepo.insertFinished({
+        startTime: s.start,
+        endTime: s.end,
+        durationSec,
+        tagId: s.tagId,
+        detail: entry.detail,
+        windowTitle: entry.window_title,
+        isFragment,
+        createdAt: entry.created_at
+      })
+    }
+
+    const first = merged[0]
+    // 保留原 id 作为第一段，避免外部引用完全丢失。
+    getDb().prepare('UPDATE time_entries SET start_time = ? WHERE id = ?').run(first.start, entry.id)
+    created.push(writeSegment(entry.id, first))
+    for (const s of merged.slice(1)) created.push(writeSegment(null, s))
+    return { entries: created, split: created.length > 1 }
+  })
+
+  const result = tx()
+  emit('split', result)
+  return { ok: true, ...result }
+}
+
 function recover(now = Date.now()) {
   const unfinished = entriesRepo.allUnfinished()
   for (const e of unfinished) {
@@ -133,5 +209,6 @@ module.exports = {
   retag,
   addPausePoint,
   listPausePointsByRange,
+  applyPausePointTag,
   recover
 }

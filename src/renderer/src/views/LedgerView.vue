@@ -2,10 +2,10 @@
   <div class="ledger">
     <div class="toolbar">
       <div class="day-nav">
-        <button class="btn" @click="shiftDay(-1)">←</button>
+        <button class="btn" :class="{ primary: isToday }" @click="goToday">今天</button>
+        <button class="btn" :class="{ primary: isYesterday }" @click="goYesterday">昨天</button>
+        <input class="input date-input" type="date" :value="dateValue" :max="todayValue" @change="setDateFromInput($event.target.value)" />
         <span class="day-label">{{ dayLabel(curDate) }}</span>
-        <button class="btn" @click="shiftDay(1)">→</button>
-        <button v-if="!isToday" class="btn" @click="goToday">回今天</button>
       </div>
       <div class="actions">
         <button v-if="!recording" class="btn primary" @click="doStart">开始记录</button>
@@ -24,10 +24,12 @@
     </div>
 
     <div class="card timeline">
-      <div v-if="!segments.length" class="empty muted">这一天还没有记录，按 Ctrl+Shift+1 开始</div>
+      <div v-if="!segments.length" class="empty muted">这一天还没有记录，按 F8 开始</div>
       <div v-for="s in segments" :key="s.id" class="seg" :style="{ borderLeftColor: s.color }" @click="openEdit(s)">
         <div class="seg-head">
+          <span class="date-chip num">{{ s.dateText }}</span>
           <span class="seg-time num">{{ s.startText }} – {{ s.endText }}</span>
+          <span class="start-chip muted num">开始 {{ s.startText }}</span>
           <span class="tag-chip" :style="{ background: s.color + '26', color: s.color }">{{ s.tagName }}</span>
           <span class="seg-dur num">{{ s.durText }}</span>
           <span v-if="s.is_fragment" class="frag muted">碎片</span>
@@ -57,6 +59,16 @@
           >{{ t.name }}</button>
         </div>
         <textarea v-model="editForm.detail" class="input edit-detail" placeholder="写点什么：这段在做什么、为什么被切碎…" rows="3"></textarea>
+        <div v-if="editEntry.pausePoints?.length" class="pause-editor">
+          <h4>暂停点切分</h4>
+          <div class="muted split-hint">暂停点标签表示“从该暂停点开始到下一个暂停点/结束”的标签。不同标签会拆分记录，连续同标签会自动合并。</div>
+          <div v-for="p in editEntry.pausePoints" :key="p.id" class="pause-edit-row">
+            <span class="num">{{ p.timeText }}</span>
+            <select class="input pause-select" :value="p.tag_id ?? editEntry.tag_id" @change="applyPauseTag(p, Number($event.target.value))">
+              <option v-for="t in tags" :key="t.id" :value="t.id">{{ t.name }}</option>
+            </select>
+          </div>
+        </div>
         <div class="edit-ops">
           <button class="btn" @click="closeEdit">取消</button>
           <button class="btn primary" @click="saveEdit">保存</button>
@@ -83,26 +95,46 @@ const editEntry = ref(null)
 const editForm = ref({ tagId: null, detail: '' })
 
 const isToday = computed(() => new Date(curDate.value).toDateString() === new Date().toDateString())
+const isYesterday = computed(() => new Date(curDate.value).toDateString() === new Date(startOfDay(Date.now()) - DAY_MS).toDateString())
+const dateValue = computed(() => toDateInput(curDate.value))
+const todayValue = computed(() => toDateInput(Date.now()))
 const totalText = computed(() => formatDuration(totalSec.value))
 const effectiveText = computed(() => formatDuration(effectiveSec.value))
 
-function shiftDay(d) {
-  curDate.value += d * DAY_MS
-  load()
-}
 function goToday() {
   curDate.value = Date.now()
   load()
+}
+function goYesterday() {
+  curDate.value = startOfDay(Date.now()) - DAY_MS
+  load()
+}
+function setDateFromInput(v) {
+  if (!v) return
+  const ts = new Date(v + 'T00:00:00').getTime()
+  const today = startOfDay(Date.now())
+  curDate.value = Math.min(ts, today)
+  load()
+}
+function toDateInput(ts) {
+  const d = new Date(ts)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 async function load() {
   try {
     const start = startOfDay(curDate.value)
     const end = start + DAY_MS
+    const tagRes = await api('tags:list')
+    tags.value = tagRes.tags || []
+    const tagMap = new Map(tags.value.map((t) => [t.id, t]))
     const r = await api('ledger:list', { start, end })
     const pointsRes = await api('ledger:pausePoints', { start, end }).catch(() => ({ points: [] }))
     const eff = await api('report:effectiveHours', { date: curDate.value })
-    const raw = r.entries || []
+    const raw = (r.entries || []).slice().sort((a, b) => b.start_time - a.start_time)
     let maxDur = 0
     const pointsByEntry = new Map()
     for (const p of pointsRes.points || []) {
@@ -111,7 +143,11 @@ async function load() {
       pointsByEntry.get(p.entry_id).push(p)
     }
     for (const e of raw) {
+      const tag = tagMap.get(e.tag_id) || { name: '未分类', color: '#9D9D9D' }
+      e.tagName = tag.name
+      e.color = tag.color
       e.pausePoints = pointsByEntry.get(e.id) || []
+      e.dateText = formatDate(e.start_time)
       e.durText = formatDuration(e.duration_sec || 0)
       e.startText = formatTime(e.start_time)
       e.endText = e.end_time ? formatTime(e.end_time) : '…'
@@ -130,8 +166,6 @@ async function load() {
     fragments.value = raw.filter((e) => e.is_fragment).length
     const cur = await api('ledger:current')
     recording.value = !!cur.entry
-    const tagRes = await api('tags:list')
-    tags.value = tagRes.tags || []
   } catch (e) {
     /* 静默 */
   }
@@ -174,6 +208,26 @@ async function saveEdit() {
   load()
 }
 
+async function applyPauseTag(point, tagId) {
+  if (!editEntry.value) return
+  const baseTag = editEntry.value.tag_id
+  if (tagId !== baseTag) {
+    const ok = confirm('您选择的标签与当前记录的标签不同。确认后，当前记录将按暂停点拆分成多条，并自动合并连续相同标签。')
+    if (!ok) {
+      load()
+      return
+    }
+  }
+  const r = await api('ledger:applyPausePointTag', {
+    entryId: editEntry.value.id,
+    pointId: point.id,
+    tagId
+  })
+  alert(r.split ? '已按暂停点拆分并刷新台账' : '已合并为一条记录')
+  editEntry.value = null
+  load()
+}
+
 let off = null
 onMounted(() => {
   load()
@@ -188,6 +242,7 @@ onBeforeUnmount(() => {
 .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
 .day-nav { display: flex; align-items: center; gap: 8px; }
 .day-label { font-size: 16px; font-weight: 500; min-width: 72px; text-align: center; }
+.date-input { width: 138px; }
 .actions { display: flex; gap: 8px; }
 .stats-row { display: flex; gap: 24px; margin-bottom: 16px; flex-wrap: wrap; }
 .stat { display: flex; flex-direction: column; }
@@ -197,7 +252,9 @@ onBeforeUnmount(() => {
 .seg { border-left: 3px solid; padding-left: 12px; cursor: pointer; }
 .seg:hover { background: var(--bg-hover); border-radius: 4px; }
 .seg-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.date-chip { font-size: 12px; color: var(--green); background: rgba(127,169,140,0.12); border: 1px solid rgba(127,169,140,0.25); padding: 1px 7px; border-radius: 999px; }
 .seg-time { font-size: 13px; color: var(--text-dim); }
+.start-chip { font-size: 12px; }
 .seg-dur { font-size: 13px; font-weight: 500; }
 .frag { font-size: 12px; }
 .pause-chip { font-size: 12px; color: var(--gold); background: rgba(224,188,114,0.12); border: 1px solid rgba(224,188,114,0.28); padding: 1px 7px; border-radius: 999px; }
@@ -225,5 +282,11 @@ onBeforeUnmount(() => {
 }
 .edit-tag.active { outline: 2px solid var(--c); }
 .edit-detail { resize: vertical; font-family: inherit; }
+.pause-editor { border-top: 1px solid var(--border); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.pause-editor h4 { font-size: 13px; font-weight: 500; color: var(--gold); }
+.split-hint { font-size: 12px; line-height: 1.5; }
+.pause-edit-row { display: flex; align-items: center; gap: 8px; }
+.pause-edit-row .num { width: 62px; color: var(--text-dim); }
+.pause-select { flex: 1; }
 .edit-ops { display: flex; justify-content: flex-end; gap: 8px; }
 </style>

@@ -9,6 +9,7 @@ const IPC = {
   LEDGER_SWITCH_TASK: 'ledger:switchTask',
   LEDGER_COMPLETE: 'ledger:complete',
   LEDGER_ADD_PAUSE_POINT: 'ledger:addPausePoint',
+  LEDGER_APPLY_PAUSE_POINT_TAG: 'ledger:applyPausePointTag',
   LEDGER_PAUSE_POINTS: 'ledger:pausePoints',
   LEDGER_PAUSE: 'ledger:pause',
   LEDGER_CURRENT: 'ledger:current',
