@@ -28,6 +28,9 @@ let current = null
 let selectedTagId = null
 let paused = false
 let menuOpen = false
+let collapsed = false
+let idleTimer = null
+const IDLE_COLLAPSE_MS = 5000
 
 function pad(n) { return String(n).padStart(2, '0') }
 function hms(sec) {
@@ -88,8 +91,29 @@ function escapeHtml(s) {
 
 function setMenu(open) {
   menuOpen = open
+  if (open) setCollapsed(false)
   document.getElementById('tagMenu').classList.toggle('hidden', !open)
   document.getElementById('tagDropdown').classList.toggle('open', open)
+  resetIdleTimer()
+}
+
+function setCollapsed(next) {
+  if (menuOpen && next) return
+  collapsed = next
+  document.querySelector('.recorder-shell').classList.toggle('collapsed', collapsed)
+  api('recorder:setCollapsed', { collapsed }).catch(() => {})
+  if (!collapsed) resetIdleTimer()
+}
+
+function resetIdleTimer() {
+  clearTimeout(idleTimer)
+  if (menuOpen) return
+  idleTimer = setTimeout(() => setCollapsed(true), IDLE_COLLAPSE_MS)
+}
+
+function wake() {
+  if (collapsed) setCollapsed(false)
+  else resetIdleTimer()
 }
 
 async function refresh() {
@@ -162,6 +186,9 @@ async function toggleRecord() {
   return startRecord()
 }
 
+document.querySelector('.recorder-shell').addEventListener('mouseenter', wake)
+document.querySelector('.recorder-shell').addEventListener('mousemove', resetIdleTimer)
+document.querySelector('.recorder-shell').addEventListener('mousedown', wake)
 document.getElementById('tagButton').addEventListener('click', () => setMenu(!menuOpen))
 document.getElementById('toggleBtn').addEventListener('click', toggleRecord)
 document.getElementById('stopBtn').addEventListener('click', stopRecord)
@@ -179,6 +206,7 @@ Promise.resolve()
   .then(loadSettings)
   .then(loadTags)
   .then(refresh)
+  .then(resetIdleTimer)
 
 setInterval(() => {
   refresh().catch(() => render())

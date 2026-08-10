@@ -9,6 +9,8 @@ let reminderWin = null
 
 const RECORDER_WIDTH = 380
 const RECORDER_HEIGHT = 260
+const RECORDER_COLLAPSED_WIDTH = 176
+const RECORDER_COLLAPSED_HEIGHT = 54
 const DIST_URL = () => `http://127.0.0.1:${require('./services/settings').get('server.port')}`
 
 function loadRenderer(win, file) {
@@ -30,9 +32,9 @@ function createRecorder() {
   recorderWin = new BrowserWindow({
     width: RECORDER_WIDTH,
     height: RECORDER_HEIGHT,
-    minWidth: RECORDER_WIDTH,
+    minWidth: RECORDER_COLLAPSED_WIDTH,
     maxWidth: RECORDER_WIDTH,
-    minHeight: RECORDER_HEIGHT,
+    minHeight: RECORDER_COLLAPSED_HEIGHT,
     maxHeight: RECORDER_HEIGHT,
     x: pos.x,
     y: pos.y,
@@ -61,13 +63,7 @@ function createRecorder() {
       settings.set('recorder.position', { x, y })
     }, 250)
   })
-  recorderWin.on('resize', () => {
-    if (!recorderWin || recorderWin.isDestroyed()) return
-    const b = recorderWin.getBounds()
-    if (b.width !== RECORDER_WIDTH) {
-      recorderWin.setBounds({ ...b, width: RECORDER_WIDTH })
-    }
-  })
+  // 尺寸由完整态/收缩态控制，不暴露任意 resize。
   loadRenderer(recorderWin, 'recorder.html')
   recorderWin.on('closed', () => { recorderWin = null })
   return recorderWin
@@ -80,7 +76,7 @@ function showRecorder() {
   if (!recorderWin || recorderWin.isDestroyed()) createRecorder()
   if (!recorderWin) return
   settings.set('recorder.hiddenToTray', false)
-  setRecorderMenuOpen(false)
+  setRecorderCollapsed(false)
   recorderWin.show()
   recorderWin.focus()
 }
@@ -99,16 +95,30 @@ function isRecorderVisible() {
 function isMiniVisible() { return isRecorderVisible() }
 
 function setRecorderMenuOpen(open) {
+  if (open) return setRecorderCollapsed(false)
   return { ok: true, open }
+}
+
+function setRecorderCollapsed(collapsed) {
+  if (!recorderWin || recorderWin.isDestroyed()) return { ok: false, error: '记录器未创建' }
+  const b = recorderWin.getBounds()
+  const right = b.x + b.width
+  const bottom = b.y + b.height
+  const width = collapsed ? RECORDER_COLLAPSED_WIDTH : RECORDER_WIDTH
+  const height = collapsed ? RECORDER_COLLAPSED_HEIGHT : RECORDER_HEIGHT
+  recorderWin.setBounds({ x: right - width, y: bottom - height, width, height })
+  return { ok: true, collapsed, width, height }
 }
 
 function setRecorderPos(x, y) {
   if (!recorderWin || recorderWin.isDestroyed()) return { ok: false, error: '记录器未创建' }
   const { workArea } = screen.getPrimaryDisplay()
   const b = recorderWin.getBounds()
-  const cx = Math.min(Math.max(x, workArea.x - RECORDER_WIDTH + 40), workArea.x + workArea.width - 40)
+  const width = b.width || RECORDER_WIDTH
+  const height = b.height || RECORDER_HEIGHT
+  const cx = Math.min(Math.max(x, workArea.x - width + 40), workArea.x + workArea.width - 40)
   const cy = Math.min(Math.max(y, workArea.y), workArea.y + workArea.height - 40)
-  recorderWin.setBounds({ x: cx, y: cy, width: RECORDER_WIDTH, height: b.height || RECORDER_HEIGHT })
+  recorderWin.setBounds({ x: cx, y: cy, width, height })
   settings.set('recorder.position', { x: cx, y: cy })
   return { ok: true, x: cx, y: cy }
 }
@@ -175,6 +185,7 @@ module.exports = {
   isRecorderVisible,
   setRecorderPos,
   setRecorderMenuOpen,
+  setRecorderCollapsed,
   // 兼容旧名字，避免外围调用崩
   getMini,
   hideMiniToTray,
