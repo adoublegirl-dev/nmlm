@@ -26,10 +26,26 @@ function defaultRecorderPos() {
   }
 }
 
+function clampRecorderPos(pos, width = RECORDER_WIDTH, height = RECORDER_HEIGHT) {
+  const displays = screen.getAllDisplays()
+  const centerX = (pos?.x || 0) + width / 2
+  const centerY = (pos?.y || 0) + height / 2
+  const display = displays.find((d) => {
+    const a = d.workArea
+    return centerX >= a.x && centerX <= a.x + a.width && centerY >= a.y && centerY <= a.y + a.height
+  }) || screen.getDisplayNearestPoint({ x: Math.round(centerX), y: Math.round(centerY) }) || screen.getPrimaryDisplay()
+  const { workArea } = display
+  return {
+    x: Math.min(Math.max(pos?.x ?? workArea.x, workArea.x), workArea.x + workArea.width - width),
+    y: Math.min(Math.max(pos?.y ?? workArea.y, workArea.y), workArea.y + workArea.height - height)
+  }
+}
+
 function createRecorder() {
   if (recorderWin && !recorderWin.isDestroyed()) return recorderWin
   const saved = settings.get('recorder.position') || settings.get('mini.position')
-  const pos = saved && saved.x != null ? saved : defaultRecorderPos()
+  const rawPos = saved && saved.x != null ? saved : defaultRecorderPos()
+  const pos = clampRecorderPos(rawPos, RECORDER_WIDTH, RECORDER_HEIGHT)
   recorderWin = new BrowserWindow({
     width: RECORDER_WIDTH,
     height: RECORDER_HEIGHT,
@@ -65,7 +81,8 @@ function createRecorder() {
       settings.set('recorder.position', { x, y })
     }, 250)
   })
-  // 尺寸由完整态/收缩态控制，不暴露任意 resize。
+  // 尺寸由完整态/收缩态控制，不暴露任意 resize。启动时总是完整态，避免上次胶囊坐标/裁剪残留影响可见区域。
+  applyRecorderShape(false, RECORDER_WIDTH, RECORDER_HEIGHT)
   loadRenderer(recorderWin, 'recorder.html')
   recorderWin.on('closed', () => { recorderWin = null })
   return recorderWin
