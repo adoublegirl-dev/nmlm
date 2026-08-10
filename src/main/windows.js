@@ -26,11 +26,11 @@ function miniDefaultPos(width, height) {
 
 function createMini() {
   const saved = settings.get('mini.position')
-  const defaultPos = miniDefaultPos(380, 150)
+  const defaultPos = miniDefaultPos(280, 160)
   const pos = saved && saved.x != null ? saved : defaultPos
   miniWin = new BrowserWindow({
-    width: 380,
-    height: 150,
+    width: 280,
+    height: 160,
     x: pos.x,
     y: pos.y,
     frame: false,
@@ -124,7 +124,7 @@ function sendTaskPickerOpen() {
 }
 
 function showTaskPicker() {
-  console.log('[niuma] 快捷键触发：打开任务选择器')
+  console.log('[niuma] 快捷键触发：开始记录')
   showRecorder()
   if (!miniWin) return
   if (!miniReady) {

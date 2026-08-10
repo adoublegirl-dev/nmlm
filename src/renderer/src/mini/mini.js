@@ -1,202 +1,140 @@
-// 悬浮记录器：默认紧凑，只做记录；展开后才露出管理动作。
+// 桌面记录器：小秒表形态。标签下拉 + 开始/暂停/停止 + 计时。
 import { api, on } from '../api'
-import { formatDuration, formatTime } from '../utils/format'
 import './mini.css'
 
 const app = document.getElementById('mini-app')
 app.innerHTML = `
-  <div class="recorder" id="recorder">
-    <div class="dragbar">
-      <div class="brand">
-        <div class="title">牛马记录器</div>
-        <div id="sub" class="sub">桌面悬浮 · 可在设置关闭</div>
-      </div>
-      <div class="top-actions no-drag">
-        <button id="more" class="icon-btn" title="展开/收起">···</button>
-        <button id="hide" class="icon-btn" title="隐藏到托盘">×</button>
-      </div>
+  <div class="recorder">
+    <div class="titlebar">
+      <div class="title">记录器</div>
+      <button id="hide" class="close-btn no-drag" title="隐藏到托盘">×</button>
     </div>
 
-    <div class="now">
-      <div id="statusDot" class="status-dot"></div>
-      <div class="now-main">
-        <div id="taskName" class="task-name">未开始</div>
-        <div id="taskMeta" class="task-meta">点击开始记录</div>
-      </div>
-      <div id="elapsed" class="elapsed num">0m</div>
+    <div class="timer num" id="timer">00:00:00</div>
+
+    <div class="field no-drag">
+      <label>标签</label>
+      <select id="tagSelect" class="select"></select>
     </div>
 
-    <div class="compact-actions no-drag">
-      <button id="primaryAction" class="btn primary grow">开始记录</button>
-      <button id="switchTask" class="btn compact-only">切换</button>
-    </div>
-
-    <div id="expandedPanel" class="expanded hidden no-drag">
-      <div class="actions">
-        <button id="pausePoint" class="btn">暂停点</button>
-        <button id="complete" class="btn">完成任务</button>
-        <button id="panel" class="btn">打开面板</button>
-      </div>
-      <div id="tagPanel" class="tag-panel hidden">
-        <input id="taskDetail" class="input task-input" placeholder="这段具体做什么（可选）" />
-        <div id="tags" class="tags"></div>
-      </div>
-      <div id="recent" class="recent"></div>
+    <div class="buttons no-drag">
+      <button id="startBtn" class="btn primary">开始</button>
+      <button id="pauseBtn" class="btn">暂停</button>
+      <button id="stopBtn" class="btn danger">停止</button>
     </div>
   </div>
 `
 
 let tags = []
 let current = null
-let currentTag = null
-let pauseCount = 0
-let expanded = false
-let tagPanelOpen = false
+let paused = false
+let selectedTagId = null
+
+function pad(n) { return String(n).padStart(2, '0') }
+function hms(sec) {
+  sec = Math.max(0, Math.floor(sec || 0))
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = sec % 60
+  return `${pad(h)}:${pad(m)}:${pad(s)}`
+}
+
+async function loadSettings() {
+  const r = await api('settings:getAll')
+  selectedTagId = r.settings?.mini?.selectedTagId || null
+}
+
+async function saveSelectedTag(id) {
+  selectedTagId = id
+  await api('settings:set', { key: 'mini.selectedTagId', value: id }).catch(() => {})
+}
 
 async function loadTags() {
   const r = await api('tags:list')
   tags = r.tags || []
+  if (!selectedTagId && tags[0]) selectedTagId = tags[0].id
+  if (selectedTagId && !tags.some((t) => t.id === Number(selectedTagId)) && tags[0]) selectedTagId = tags[0].id
   renderTags()
 }
 
 function renderTags() {
-  const el = document.getElementById('tags')
-  el.innerHTML = tags.map((t) => `
-    <button class="tag-btn" data-id="${t.id}" style="--c:${t.color}">
-      <span class="key">${t.shortcut_key ?? '·'}</span>${t.name}
-    </button>
-  `).join('')
-  el.querySelectorAll('.tag-btn').forEach((b) => b.addEventListener('click', () => switchTask(Number(b.dataset.id))))
+  const sel = document.getElementById('tagSelect')
+  sel.innerHTML = tags.map((t) => `<option value="${t.id}">${t.name}</option>`).join('')
+  if (selectedTagId) sel.value = String(selectedTagId)
 }
 
 async function refresh() {
-  const cur = await api('ledger:current')
-  current = cur.entry || null
-  currentTag = current && tags.find((t) => t.id === current.tag_id)
-  pauseCount = 0
+  const r = await api('ledger:current')
+  current = r.entry || null
   if (current) {
-    const ps = await api('ledger:pausePoints', { start: current.start_time - 1, end: Date.now() + 1000 }).catch(() => ({ points: [] }))
-    pauseCount = (ps.points || []).filter((p) => p.entry_id === current.id).length
+    paused = false
+    if (current.tag_id) {
+      selectedTagId = current.tag_id
+      const sel = document.getElementById('tagSelect')
+      if (sel) sel.value = String(current.tag_id)
+    }
   }
-  renderCurrent()
-  if (expanded) renderRecentSafe()
+  render()
 }
 
-async function renderRecentSafe() {
-  const today = await api('report:dailyTimeline', { date: Date.now() }).catch(() => ({ segments: [] }))
-  renderRecent(today.segments || [])
-}
-
-function renderCurrent() {
-  const dot = document.getElementById('statusDot')
-  const name = document.getElementById('taskName')
-  const meta = document.getElementById('taskMeta')
-  const elapsed = document.getElementById('elapsed')
-  const primary = document.getElementById('primaryAction')
-  const switchBtn = document.getElementById('switchTask')
-  if (!current) {
-    dot.classList.remove('recording')
-    name.textContent = '未开始'
-    meta.textContent = '选择标签开始一段记录'
-    elapsed.textContent = '0m'
-    primary.textContent = '开始记录'
-    switchBtn.classList.add('hidden')
-    return
+function render() {
+  const timer = document.getElementById('timer')
+  const startBtn = document.getElementById('startBtn')
+  const pauseBtn = document.getElementById('pauseBtn')
+  const stopBtn = document.getElementById('stopBtn')
+  if (current) {
+    timer.textContent = hms((Date.now() - current.start_time) / 1000)
+    startBtn.textContent = '记录中'
+    startBtn.disabled = true
+    pauseBtn.disabled = false
+    stopBtn.disabled = false
+  } else {
+    timer.textContent = '00:00:00'
+    startBtn.textContent = paused ? '继续' : '开始'
+    startBtn.disabled = false
+    pauseBtn.disabled = true
+    stopBtn.disabled = true
   }
-  dot.classList.add('recording')
-  name.textContent = currentTag ? currentTag.name : '未分类任务'
-  const pointText = pauseCount ? ` · ${pauseCount} 个暂停点` : ''
-  meta.textContent = (current.detail || '正在记录') + pointText
-  elapsed.textContent = formatDuration(Math.floor((Date.now() - current.start_time) / 1000))
-  primary.textContent = '打暂停点'
-  switchBtn.classList.remove('hidden')
 }
 
-function renderRecent(segments) {
-  const el = document.getElementById('recent')
-  const list = segments.filter((s) => s.end_time).slice(-2).reverse()
-  if (!list.length) {
-    el.innerHTML = '<span class="muted">今天还没有完成的片段</span>'
-    return
-  }
-  el.innerHTML = list.map((s) => `<div class="recent-item"><span class="time">${formatTime(s.start_time)}</span><span style="color:${s.color}">${s.tagName}</span><span class="dur">${formatDuration(s.duration_sec || 0)}</span></div>`).join('')
-}
-
-function setExpanded(val) {
-  expanded = val
-  document.getElementById('expandedPanel').classList.toggle('hidden', !expanded)
-  document.getElementById('recorder').classList.toggle('is-expanded', expanded)
-  api('mini:resize', { width: 380, height: expanded ? 270 : 150 }).catch(() => {})
-  if (expanded) renderRecentSafe()
-  if (!expanded) toggleTags(false)
-}
-
-function toggleTags(force) {
-  tagPanelOpen = force == null ? !tagPanelOpen : force
-  if (tagPanelOpen && !expanded) setExpanded(true)
-  document.getElementById('tagPanel').classList.toggle('hidden', !tagPanelOpen)
-  if (tagPanelOpen) document.getElementById('taskDetail').focus()
-}
-
-async function switchTask(tagId) {
-  const detail = document.getElementById('taskDetail').value.trim() || null
-  const r = await api('ledger:switchTask', { tagId, detail })
-  if (!r.ok) return alert(r.error || '切换失败')
-  document.getElementById('taskDetail').value = ''
-  toggleTags(false)
+async function startRecord() {
+  const tagId = Number(document.getElementById('tagSelect').value || selectedTagId || 0) || null
+  if (!tagId) return alert('请先配置或选择标签')
+  await saveSelectedTag(tagId)
+  const r = await api('ledger:switchTask', { tagId })
+  if (!r.ok) return alert(r.error || '开始失败')
+  paused = false
   await refresh()
 }
 
-async function completeTask() {
+async function pauseRecord() {
+  if (!current) return
+  const r = await api('ledger:stop', {})
+  if (!r.ok) return alert(r.error || '暂停失败')
+  paused = true
+  await refresh()
+}
+
+async function stopRecord() {
   if (!current) return
   const r = await api('ledger:complete', {})
-  if (!r.ok) return alert(r.error || '完成失败')
+  if (!r.ok) return alert(r.error || '停止失败')
+  paused = false
   await refresh()
 }
 
-async function addPausePoint() {
-  if (!current) {
-    toggleTags(true)
-    return
-  }
-  const r = await api('ledger:addPausePoint', { detail: null })
-  if (!r.ok) return alert(r.error || '添加失败')
-  pauseCount += 1
-  renderCurrent()
-  flash(`已添加暂停点 #${pauseCount}`)
-}
-
-function flash(text) {
-  const sub = document.getElementById('sub')
-  sub.textContent = text
-  setTimeout(() => { sub.textContent = '桌面悬浮 · 可在设置关闭' }, 1500)
-}
-
-function bindKeys() {
-  document.addEventListener('keydown', (e) => {
-    if (/^[0-9]$/.test(e.key) && tagPanelOpen) {
-      const tag = tags.find((t) => Number(t.shortcut_key) === Number(e.key))
-      if (tag) switchTask(tag.id)
-    }
-    if (e.key === 'Escape') {
-      if (tagPanelOpen) toggleTags(false)
-      else if (expanded) setExpanded(false)
-    }
-  })
-}
-
-document.getElementById('primaryAction').addEventListener('click', () => current ? addPausePoint() : toggleTags(true))
-document.getElementById('switchTask').addEventListener('click', () => toggleTags(true))
-document.getElementById('more').addEventListener('click', () => setExpanded(!expanded))
-document.getElementById('complete').addEventListener('click', completeTask)
-document.getElementById('pausePoint').addEventListener('click', addPausePoint)
-document.getElementById('panel').addEventListener('click', () => api('server:openBrowser'))
+document.getElementById('tagSelect').addEventListener('change', (e) => saveSelectedTag(Number(e.target.value)))
+document.getElementById('startBtn').addEventListener('click', startRecord)
+document.getElementById('pauseBtn').addEventListener('click', pauseRecord)
+document.getElementById('stopBtn').addEventListener('click', stopRecord)
 document.getElementById('hide').addEventListener('click', () => api('mini:hide'))
 
 on('ledger:state-changed', refresh)
-on('mini:open-task-picker', () => toggleTags(true))
+on('mini:open-task-picker', () => startRecord())
 
-loadTags().then(refresh)
-bindKeys()
-setExpanded(false)
-setInterval(renderCurrent, 1000)
+Promise.resolve()
+  .then(loadSettings)
+  .then(loadTags)
+  .then(refresh)
+
+setInterval(render, 1000)

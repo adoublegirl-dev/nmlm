@@ -119,6 +119,7 @@ const DEFAULT_SETTINGS = {
   },
   mini: {
     enabled: true, // 启动时是否自动显示桌面悬浮记录器
+    selectedTagId: null,
     position: { x: null, y: null }, // null = 右下角默认
     hiddenToTray: false
   },

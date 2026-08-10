@@ -60,7 +60,7 @@ if (!gotLock) {
 
     // 7. 快捷键
     const failed = shortcut.registerAll({
-      start: () => { console.log('[niuma] 快捷键触发: start'); windows.showTaskPicker() },
+      start: () => { console.log('[niuma] 快捷键触发: start'); onStartShortcut() },
       stop: () => { console.log('[niuma] 快捷键触发: stop'); onStopShortcut() },
       screenshot: () => { console.log('[niuma] 快捷键触发: screenshot'); evidenceCapture() },
       pack: () => { console.log('[niuma] 快捷键触发: pack'); actions.pack() },
@@ -142,7 +142,7 @@ function buildActions() {
     toggleRecord: () => {
       const current = ledger.current()
       if (current) return onStopShortcut()
-      windows.showTaskPicker()
+      return onStartShortcut()
     },
     screenshot: () => evidence.capture(),
     pack: () => {
@@ -154,6 +154,28 @@ function buildActions() {
     },
     quit: () => app.quit()
   }
+}
+
+async function onStartShortcut() {
+  const ledger = require('./services/ledger')
+  const settings = require('./services/settings')
+  const tray = require('./tray')
+  const windows = require('./windows')
+  const { tagsRepo } = require('./db')
+  const selected = settings.get('mini.selectedTagId')
+  const tags = tagsRepo.all()
+  const tag = tags.find((t) => t.id === Number(selected)) || tags[0]
+  if (!tag) {
+    const { Notification } = require('electron')
+    new Notification({ title: '牛马联盟', body: '没有可用标签，请先在设置里创建标签' }).show()
+    return { ok: false, error: '没有可用标签' }
+  }
+  const r = await ledger.switchTask({ tagId: tag.id })
+  if (r.ok) {
+    tray.setState('recording')
+    if (settings.get('mini.enabled')) windows.showRecorder()
+  }
+  return r
 }
 
 async function onStopShortcut() {
