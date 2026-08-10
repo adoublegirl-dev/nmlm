@@ -1,8 +1,7 @@
-// 桌面记录器：小秒表形态。标签下拉 + 开始/暂停/停止 + 计时。
 import { api, on } from '../api'
-import './mini.css'
+import './recorder.css'
 
-const app = document.getElementById('mini-app')
+const app = document.getElementById('recorder-app')
 app.innerHTML = `
   <div class="recorder">
     <div class="titlebar">
@@ -10,7 +9,7 @@ app.innerHTML = `
       <button id="hide" class="close-btn no-drag" title="隐藏到托盘">×</button>
     </div>
 
-    <div class="timer num" id="timer">00:00:00</div>
+    <div id="timer" class="timer num">00:00:00</div>
 
     <div class="field no-drag">
       <label>标签</label>
@@ -27,8 +26,8 @@ app.innerHTML = `
 
 let tags = []
 let current = null
-let paused = false
 let selectedTagId = null
+let paused = false
 
 function pad(n) { return String(n).padStart(2, '0') }
 function hms(sec) {
@@ -41,12 +40,12 @@ function hms(sec) {
 
 async function loadSettings() {
   const r = await api('settings:getAll')
-  selectedTagId = r.settings?.mini?.selectedTagId || null
+  selectedTagId = r.settings?.recorder?.selectedTagId || r.settings?.mini?.selectedTagId || null
 }
 
 async function saveSelectedTag(id) {
   selectedTagId = id
-  await api('settings:set', { key: 'mini.selectedTagId', value: id }).catch(() => {})
+  await api('settings:set', { key: 'recorder.selectedTagId', value: id }).catch(() => {})
 }
 
 async function loadTags() {
@@ -82,6 +81,7 @@ function render() {
   const startBtn = document.getElementById('startBtn')
   const pauseBtn = document.getElementById('pauseBtn')
   const stopBtn = document.getElementById('stopBtn')
+
   if (current) {
     timer.textContent = hms((Date.now() - current.start_time) / 1000)
     startBtn.textContent = '记录中'
@@ -97,8 +97,12 @@ function render() {
   }
 }
 
+function selectedTag() {
+  return Number(document.getElementById('tagSelect').value || selectedTagId || 0) || null
+}
+
 async function startRecord() {
-  const tagId = Number(document.getElementById('tagSelect').value || selectedTagId || 0) || null
+  const tagId = selectedTag()
   if (!tagId) return alert('请先配置或选择标签')
   await saveSelectedTag(tagId)
   const r = await api('ledger:start', { tagId })
@@ -127,7 +131,7 @@ document.getElementById('tagSelect').addEventListener('change', (e) => saveSelec
 document.getElementById('startBtn').addEventListener('click', startRecord)
 document.getElementById('pauseBtn').addEventListener('click', pauseRecord)
 document.getElementById('stopBtn').addEventListener('click', stopRecord)
-document.getElementById('hide').addEventListener('click', () => api('mini:hide'))
+document.getElementById('hide').addEventListener('click', () => api('recorder:hide'))
 
 on('ledger:state-changed', refresh)
 

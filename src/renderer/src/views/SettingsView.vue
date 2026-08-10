@@ -24,7 +24,7 @@
       <h3>桌面悬浮记录器</h3>
       <div class="row">
         <span>启动时显示</span>
-        <input type="checkbox" :checked="mini.enabled" @change="setMini('enabled', $event.target.checked)" />
+        <input type="checkbox" :checked="recorder.enabled" @change="setRecorder('enabled', $event.target.checked)" />
         <span class="muted">关闭后不会自动挂在桌面，需要从托盘/启动器手动打开</span>
       </div>
     </div>
@@ -138,7 +138,7 @@ const shortcuts = ref({})
 const reminder = ref({})
 const evidence = ref({})
 const model = ref({})
-const mini = ref({})
+const recorder = ref({})
 const tags = ref([])
 const newTag = ref({ name: '', color: '#e0bc72', key: null, isBreak: false })
 const recordingKey = ref(null)
@@ -149,7 +149,7 @@ const maskedToken = computed(() => {
   return token.value.slice(0, 6) + '••••'
 })
 
-const LABELS = { start: '开始记录', stop: '结束记录', screenshot: '快捷截图', pack: '打包证据链', openPanel: '打开面板' }
+const LABELS = { start: '开始/暂停记录', stop: '停止记录', screenshot: '快捷截图', pack: '打包证据链', openPanel: '打开面板' }
 function labelOf(name) {
   return LABELS[name] || name
 }
@@ -163,7 +163,7 @@ async function load() {
   reminder.value = s.reminder || {}
   evidence.value = s.evidence || {}
   model.value = s.model || {}
-  mini.value = s.mini || {}
+  recorder.value = s.recorder || s.mini || {}
   const info = await api('server:info')
   urls.value = info.urls || urls.value
   token.value = info.token || token.value
@@ -181,9 +181,9 @@ async function setEvidence(key, val) {
 async function setModel(key, val) {
   await api('settings:set', { key: `model.${key}`, value: val })
 }
-async function setMini(key, val) {
-  await api('settings:set', { key: `mini.${key}`, value: val })
-  mini.value[key] = val
+async function setRecorder(key, val) {
+  await api('settings:set', { key: `recorder.${key}`, value: val })
+  recorder.value[key] = val
 }
 
 async function resetToken() {
@@ -253,8 +253,8 @@ function onKeyDown(e) {
   const key = e.key.length === 1 ? e.key.toUpperCase() : e.key
   const combo = [...mods, key].join('+')
   if (mods.length === 0) return
-  if (/Shift\+[0-9]$/.test(combo)) {
-    alert('Shift + 数字 在 Windows 全局快捷键里不稳定，建议用 Ctrl+Alt+数字。')
+  if (/(Shift|Alt)\+[0-9]$/.test(combo)) {
+    alert('数字组合在 Windows 全局快捷键里容易撞系统/显卡/桌面热键，建议用 F8/F9/F10 这类功能键。')
     return
   }
   finishRecord(combo)

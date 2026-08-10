@@ -49,10 +49,10 @@ if (!gotLock) {
     if (actualPort !== settings.get('server.port')) settings.set('server.port', actualPort)
     refreshLanUrls(settings)
 
-    // 6. 托盘 + 悬浮记录器（是否自动显示由设置控制）
+    // 6. 托盘 + 独立记录器（是否自动显示由设置控制）
     const actions = buildActions()
     tray.create(actions)
-    if (settings.get('mini.enabled')) windows.createMini()
+    if (settings.get('recorder.enabled') || settings.get('mini.enabled')) windows.createRecorder()
 
     // 7. 快捷键
     const failed = shortcut.registerAll({
@@ -91,11 +91,16 @@ function ensureRuntimeToken(settings) {
 function normalizeShortcutSettings(settings) {
   const shortcuts = settings.get('shortcuts') || {}
   const stableDefaults = {
-    start: 'CommandOrControl+Alt+1',
-    stop: 'CommandOrControl+Alt+2',
-    screenshot: 'CommandOrControl+Alt+3',
-    pack: 'CommandOrControl+Alt+4',
-    openPanel: 'CommandOrControl+Alt+0'
+    start: 'F8',
+    stop: 'F9',
+    screenshot: 'F10',
+    pack: '',
+    openPanel: 'F12'
+  }
+  if (settings.get('shortcutPresetVersion') !== 'fkeys-v1') {
+    settings.set('shortcuts', stableDefaults)
+    settings.set('shortcutPresetVersion', 'fkeys-v1')
+    return
   }
   let changed = false
   const next = { ...shortcuts }
@@ -105,9 +110,12 @@ function normalizeShortcutSettings(settings) {
       next[key] = value.replace(/^Ctrl\+/, 'CommandOrControl+')
       changed = true
     }
-    // Windows 上 Shift+数字在全局快捷键层经常被键盘布局解释成 !/@/#，注册成功但实际触发失败。
-    // 已知旧默认值统一迁移为 Ctrl/Cmd+Alt+数字。
-    if (/^CommandOrControl\+Shift\+[0-9]$/.test(next[key]) && stableDefaults[key]) {
+    // Windows 上 Shift/Alt + 数字可能撞系统、显卡、桌面热键；统一迁移到 F 键。
+    if (/^(CommandOrControl\+)?(Shift|Alt)\+[0-9]$/.test(next[key]) && Object.prototype.hasOwnProperty.call(stableDefaults, key)) {
+      next[key] = stableDefaults[key]
+      changed = true
+    }
+    if (/^CommandOrControl\+Alt\+[0-9]$/.test(next[key]) && Object.prototype.hasOwnProperty.call(stableDefaults, key)) {
       next[key] = stableDefaults[key]
       changed = true
     }
@@ -134,7 +142,7 @@ function buildActions() {
   const windows = require('./windows')
   return {
     openRecorder: () => windows.showRecorder(),
-    hideRecorder: () => windows.hideMiniToTray(true),
+    hideRecorder: () => windows.hideRecorder(true),
     toggleRecord: () => {
       const current = ledger.current()
       if (current) return onStopShortcut()
@@ -158,7 +166,7 @@ async function onStartShortcut() {
   const tray = require('./tray')
   const windows = require('./windows')
   const { tagsRepo } = require('./db')
-  const selected = settings.get('mini.selectedTagId')
+  const selected = settings.get('recorder.selectedTagId') || settings.get('mini.selectedTagId')
   const tags = tagsRepo.all()
   const tag = tags.find((t) => t.id === Number(selected)) || tags[0]
   if (!tag) {
@@ -167,14 +175,16 @@ async function onStartShortcut() {
     return { ok: false, error: '没有可用标签' }
   }
   if (ledger.current()) {
-    if (settings.get('mini.enabled')) windows.showRecorder()
-    return { ok: true, entry: ledger.current(), alreadyRecording: true }
+    const r = await ledger.stop({})
+    console.log(`[niuma] pause result: ok=${r.ok}${r.entry ? ` id=${r.entry.id}` : ''}${r.error ? ` error=${r.error}` : ''}`)
+    if (r.ok) tray.setState('idle')
+    return r
   }
   const r = await ledger.start({ tagId: tag.id })
   console.log(`[niuma] start result: ok=${r.ok}${r.entry ? ` id=${r.entry.id}` : ''}${r.error ? ` error=${r.error}` : ''}`)
   if (r.ok) {
     tray.setState('recording')
-    if (settings.get('mini.enabled')) windows.showRecorder()
+    if (settings.get('recorder.enabled') || settings.get('mini.enabled')) windows.showRecorder()
   }
   return r
 }

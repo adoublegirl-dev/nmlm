@@ -54,7 +54,10 @@ const IPC = {
   // app
   APP_OPEN_SCREENSHOTS_DIR: 'app:openScreenshotsDir',
   APP_QUIT: 'app:quit',
-  // mini dock
+  // recorder
+  RECORDER_HIDE: 'recorder:hide',
+  RECORDER_SET_POS: 'recorder:setPos',
+  // legacy mini dock aliases
   MINI_HIDE: 'mini:hide',
   MINI_SET_POS: 'mini:setPos',
   // tagpicker
@@ -78,11 +81,11 @@ const EVENTS = {
 const DEFAULT_SETTINGS = {
   // 快捷键：accelerator 为空字符串表示未启用
   shortcuts: {
-    start: 'CommandOrControl+Alt+1',
-    stop: 'CommandOrControl+Alt+2',
-    screenshot: 'CommandOrControl+Alt+3',
-    pack: 'CommandOrControl+Alt+4',
-    openPanel: 'CommandOrControl+Alt+0'
+    start: 'F8',
+    stop: 'F9',
+    screenshot: 'F10',
+    pack: '',
+    openPanel: 'F12'
   },
   reminder: {
     enabled: true,
@@ -115,11 +118,17 @@ const DEFAULT_SETTINGS = {
   server: {
     port: 37129
   },
-  mini: {
-    enabled: true, // 启动时是否自动显示桌面悬浮记录器
+  recorder: {
+    enabled: true, // 启动时是否自动显示桌面记录器
     selectedTagId: null,
     position: { x: null, y: null }, // null = 右下角默认
     hiddenToTray: false
+  },
+  mini: {
+    enabled: false, // legacy，仅用于兼容旧配置
+    selectedTagId: null,
+    position: { x: null, y: null },
+    hiddenToTray: true
   },
   activity: {
     pollIntervalSec: 30

@@ -25,13 +25,9 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
 .no-drag, button, select { -webkit-app-region: no-drag; }
 .title { font-size: 14px; font-weight: 700; color: #f0c674; letter-spacing: .08em; }
 .close-btn {
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
+  width: 24px; height: 24px; border-radius: 999px;
   border: 1px solid rgba(255,255,255,.16);
-  background: rgba(255,255,255,.08);
-  color: #f2efe9;
-  cursor: pointer;
+  background: rgba(255,255,255,.08); color: #f2efe9; cursor: pointer;
 }
 .close-btn:hover { background: rgba(255,255,255,.16); }
 .timer {
@@ -46,8 +42,7 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
 .field { display: flex; align-items: center; gap: 8px; }
 .field label { color: #bdb5a8; font-size: 12px; }
 .select {
-  flex: 1;
-  min-width: 0;
+  flex: 1; min-width: 0;
   padding: 7px 9px;
   border-radius: 9px;
   border: 1px solid rgba(255,255,255,.15);
@@ -57,7 +52,7 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
 }
 .buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
 .btn {
-  padding: 8px 8px;
+  padding: 8px;
   border-radius: 9px;
   border: 1px solid rgba(255,255,255,.15);
   background: rgba(255,255,255,.08);

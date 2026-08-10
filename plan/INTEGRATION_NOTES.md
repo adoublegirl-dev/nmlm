@@ -5,11 +5,11 @@
 
 ## 一、当前状态（2026-08-05）
 
-**P0+ 完成并冒烟通过**：台账闭环 + 桌面悬浮任务播放器 + 浏览器面板 + 快捷工具 + 待办 + MCP 桥 + Express 服务。
+**P0+ 完成并冒烟通过**：台账闭环 + 独立桌面记录器 + 浏览器面板 + 快捷工具 + 待办 + MCP 桥 + Express 服务。
 
 已验证：
 - 15 个单元测试全绿（ledger 状态机 / report 聚合 / time 工具）
-- Electron 启动无报错，`http://127.0.0.1:37129` 面板/mini/tagpicker 页面均 200
+- Electron 启动无报错，`http://127.0.0.1:37129` 面板/recorder/tagpicker 页面均 200
 - API 通道正常：server:info、tools:list（6 个默认工具）、ledger:current、todos:list
 - 新增：任务播放器 switchTask/complete/pausePoint，待办 CRUD，MCP server（src/mcp/server.mjs）
 
@@ -88,3 +88,4 @@ npm run dev                 # 构建后启动 electron
 - 2026-08-10（补丁）：悬浮记录器重新分层：默认紧凑态只显示当前任务/计时/主动作/更多，展开态才展示切换、完成、暂停点、打开面板，标签选择为第三层。新增设置项 mini.enabled，控制启动时是否自动显示悬浮记录器；关闭后可从托盘/启动器手动显示。暂停点在记录器中显示数量，台账页显示暂停点 chip 和时间点。快捷键先尝试过 CommandOrControl+Shift+数字，但 Windows 上 Shift+数字存在键盘布局解释问题，最终改用 CommandOrControl+Alt+数字并迁移旧配置，启动日志输出注册成功/失败，失败时弹 Notification。
 - 2026-08-10（记录器重做）：用户明确记录器只承担记录职能，废弃“任务播放器/复杂面板”形态。桌面记录器改为小秒表：标题仅“记录器”，显示 HH:MM:SS、标签下拉、开始/暂停/停止按钮、关闭隐藏到托盘并继续服务、窗口原生拖拽。快捷键 start/stop 改为主进程直接写 ledger，不再依赖记录器窗口 JS：Ctrl+Alt+1 按 mini.selectedTagId 或第一个标签直接 ledger.start，Ctrl+Alt+2 ledger.complete；记录器通过 ledger 事件刷新。
 - 2026-08-10（快捷键变大修复）：用户反馈快捷键后没有记录但桌面记录器变大。根因是旧“任务选择器/播放器”通道残留：second-instance 调 resizeMini、IPC MINI_RESIZE、windows.showTaskPicker/send mini:open-task-picker、mini 端监听 mini:open-task-picker。已全部删除，grep 确认无 showTaskPicker / mini:open-task-picker / MINI_RESIZE / resizeMini。记录器窗口固定 280×160，快捷键不再触发任何窗口 resize。
+- 2026-08-10（硬切重写）：用户仍反馈会放大，评估后停止修补旧 mini，新增完全独立 recorder.html + src/renderer/src/recorder/，Vite 入口从 mini 改为 recorder，旧 mini.html/src/mini 删除；windows.js 重写为 recorderWin/createRecorder/showRecorder/hideRecorder，不再存在 resize API；设置从 recorder.enabled/selectedTagId/position 读取，保留 mini 仅兼容旧数据。快捷键改用 F8/F9/F10/F12，避免 Ctrl+Alt+数字撞桌面/显卡热键：F8 开始/暂停，F9 停止，F10 截图，F12 面板。

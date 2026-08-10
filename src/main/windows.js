@@ -1,34 +1,39 @@
-// 窗口管理：迷你栏、TagPicker、提醒浮窗。主面板走浏览器，无大窗口。
+// 窗口管理：记录器、TagPicker、提醒浮窗。主面板走浏览器，无大窗口。
 const { BrowserWindow, screen } = require('electron')
 const path = require('path')
 const settings = require('./services/settings')
 
-let miniWin = null
+let recorderWin = null
 let tagPickerWin = null
 let reminderWin = null
 
+const RECORDER_WIDTH = 280
+const RECORDER_HEIGHT = 160
 const DIST_URL = () => `http://127.0.0.1:${require('./services/settings').get('server.port')}`
 
 function loadRenderer(win, file) {
   win.loadURL(`${DIST_URL()}/${file}`)
 }
 
-// ---------- 迷你栏 ----------
-function miniDefaultPos(width, height) {
+function defaultRecorderPos() {
   const { workArea } = screen.getPrimaryDisplay()
   return {
-    x: Math.round(workArea.x + workArea.width - width - 24),
-    y: Math.round(workArea.y + workArea.height - height - 72)
+    x: Math.round(workArea.x + workArea.width - RECORDER_WIDTH - 24),
+    y: Math.round(workArea.y + workArea.height - RECORDER_HEIGHT - 72)
   }
 }
 
-function createMini() {
-  const saved = settings.get('mini.position')
-  const defaultPos = miniDefaultPos(280, 160)
-  const pos = saved && saved.x != null ? saved : defaultPos
-  miniWin = new BrowserWindow({
-    width: 280,
-    height: 160,
+function createRecorder() {
+  if (recorderWin && !recorderWin.isDestroyed()) return recorderWin
+  const saved = settings.get('recorder.position') || settings.get('mini.position')
+  const pos = saved && saved.x != null ? saved : defaultRecorderPos()
+  recorderWin = new BrowserWindow({
+    width: RECORDER_WIDTH,
+    height: RECORDER_HEIGHT,
+    minWidth: RECORDER_WIDTH,
+    maxWidth: RECORDER_WIDTH,
+    minHeight: RECORDER_HEIGHT,
+    maxHeight: RECORDER_HEIGHT,
     x: pos.x,
     y: pos.y,
     frame: false,
@@ -36,6 +41,8 @@ function createMini() {
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: false,
+    maximizable: false,
+    fullscreenable: false,
     hasShadow: false,
     focusable: true,
     webPreferences: {
@@ -44,57 +51,63 @@ function createMini() {
       nodeIntegration: false
     }
   })
-  miniWin.setAlwaysOnTop(true, 'screen-saver')
+  recorderWin.setAlwaysOnTop(true, 'screen-saver')
   let saveTimer = null
-  miniWin.on('move', () => {
+  recorderWin.on('move', () => {
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
-      if (!miniWin || miniWin.isDestroyed()) return
-      const [x, y] = miniWin.getPosition()
-      settings.set('mini.position', { x, y })
+      if (!recorderWin || recorderWin.isDestroyed()) return
+      const [x, y] = recorderWin.getPosition()
+      settings.set('recorder.position', { x, y })
     }, 250)
   })
-  loadRenderer(miniWin, 'mini.html')
-  miniWin.on('closed', () => {
-    miniWin = null
+  recorderWin.on('resize', () => {
+    if (!recorderWin || recorderWin.isDestroyed()) return
+    const b = recorderWin.getBounds()
+    if (b.width !== RECORDER_WIDTH || b.height !== RECORDER_HEIGHT) {
+      recorderWin.setBounds({ ...b, width: RECORDER_WIDTH, height: RECORDER_HEIGHT })
+    }
   })
-  return miniWin
+  loadRenderer(recorderWin, 'recorder.html')
+  recorderWin.on('closed', () => { recorderWin = null })
+  return recorderWin
 }
 
-function getMini() {
-  return miniWin
+function getRecorder() { return recorderWin }
+function getMini() { return recorderWin } // 兼容旧调用，只返回 recorder
+
+function showRecorder() {
+  if (!recorderWin || recorderWin.isDestroyed()) createRecorder()
+  if (!recorderWin) return
+  settings.set('recorder.hiddenToTray', false)
+  recorderWin.setSize(RECORDER_WIDTH, RECORDER_HEIGHT)
+  recorderWin.show()
+  recorderWin.focus()
 }
 
-function setMiniPos(x, y) {
-  if (miniWin) {
-    const { workArea } = screen.getPrimaryDisplay()
-    const b = miniWin.getBounds()
-    const cx = Math.min(Math.max(x, workArea.x - b.width + 40), workArea.x + workArea.width - 40)
-    const cy = Math.min(Math.max(y, workArea.y), workArea.y + workArea.height - 40)
-    miniWin.setPosition(cx, cy)
-    settings.set('mini.position', { x: cx, y: cy })
-    return { ok: true, x: cx, y: cy }
-  }
-  return { ok: false, error: '迷你栏未创建' }
-}
-
-function hideMiniToTray(flag) {
-  settings.set('mini.hiddenToTray', flag)
-  if (flag && miniWin) miniWin.hide()
+function hideRecorder(flag = true) {
+  settings.set('recorder.hiddenToTray', !!flag)
+  if (flag && recorderWin && !recorderWin.isDestroyed()) recorderWin.hide()
   else if (!flag) showRecorder()
 }
 
-function showRecorder() {
-  if (!miniWin) createMini()
-  if (!miniWin) return
-  settings.set('mini.hiddenToTray', false)
-  miniWin.show()
-  miniWin.focus()
-}
+function hideMiniToTray(flag) { hideRecorder(flag) }
 
-function isMiniVisible() {
-  return !!(miniWin && !miniWin.isDestroyed() && miniWin.isVisible())
+function isRecorderVisible() {
+  return !!(recorderWin && !recorderWin.isDestroyed() && recorderWin.isVisible())
 }
+function isMiniVisible() { return isRecorderVisible() }
+
+function setRecorderPos(x, y) {
+  if (!recorderWin || recorderWin.isDestroyed()) return { ok: false, error: '记录器未创建' }
+  const { workArea } = screen.getPrimaryDisplay()
+  const cx = Math.min(Math.max(x, workArea.x - RECORDER_WIDTH + 40), workArea.x + workArea.width - 40)
+  const cy = Math.min(Math.max(y, workArea.y), workArea.y + workArea.height - 40)
+  recorderWin.setBounds({ x: cx, y: cy, width: RECORDER_WIDTH, height: RECORDER_HEIGHT })
+  settings.set('recorder.position', { x: cx, y: cy })
+  return { ok: true, x: cx, y: cy }
+}
+function setMiniPos(x, y) { return setRecorderPos(x, y) }
 
 // ---------- TagPicker ----------
 function createTagPicker(entryId) {
@@ -118,9 +131,7 @@ function createTagPicker(entryId) {
     }
   })
   tagPickerWin.loadURL(`${DIST_URL()}/tagpicker.html?entryId=${encodeURIComponent(String(entryId))}`)
-  tagPickerWin.on('closed', () => {
-    tagPickerWin = null
-  })
+  tagPickerWin.on('closed', () => { tagPickerWin = null })
   return tagPickerWin
 }
 
@@ -147,10 +158,23 @@ function createReminder(payload) {
     }
   })
   reminderWin.loadURL(`${DIST_URL()}/reminder.html?payload=${encodeURIComponent(JSON.stringify(payload || {}))}`)
-  reminderWin.on('closed', () => {
-    reminderWin = null
-  })
+  reminderWin.on('closed', () => { reminderWin = null })
   return reminderWin
 }
 
-module.exports = { createMini, getMini, setMiniPos, hideMiniToTray, showRecorder, isMiniVisible, createTagPicker, closeTagPicker, createReminder }
+module.exports = {
+  createRecorder,
+  getRecorder,
+  showRecorder,
+  hideRecorder,
+  isRecorderVisible,
+  setRecorderPos,
+  // 兼容旧名字，避免外围调用崩
+  getMini,
+  hideMiniToTray,
+  isMiniVisible,
+  setMiniPos,
+  createTagPicker,
+  closeTagPicker,
+  createReminder
+}

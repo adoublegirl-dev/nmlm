@@ -12,7 +12,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         panel: resolve(__dirname, 'src/renderer/panel.html'),
-        mini: resolve(__dirname, 'src/renderer/mini.html'),
+        recorder: resolve(__dirname, 'src/renderer/recorder.html'),
         tagpicker: resolve(__dirname, 'src/renderer/tagpicker.html'),
         reminder: resolve(__dirname, 'src/renderer/reminder.html')
       }

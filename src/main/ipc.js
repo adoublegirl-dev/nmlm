@@ -48,7 +48,7 @@ function wireServiceEmitters() {
 // ---------- 通道实现 ----------
 function registerAll() {
   // ledger
-  registerHandler(IPC.LEDGER_START, () => ledger.start())
+  registerHandler(IPC.LEDGER_START, (a) => ledger.start(a))
   registerHandler(IPC.LEDGER_STOP, (a) => ledger.stop(a))
   registerHandler(IPC.LEDGER_SWITCH_TASK, (a) => ledger.switchTask(a))
   registerHandler(IPC.LEDGER_COMPLETE, (a) => ledger.complete(a))
@@ -100,9 +100,9 @@ function registerAll() {
   registerHandler(IPC.SETTINGS_GET_ALL, () => ({ ok: true, settings: settings.getAll() }))
   registerHandler(IPC.SETTINGS_SET, (a) => {
     const value = settings.set(a.key, a.value)
-    if (a.key === 'mini.enabled') {
+    if (a.key === 'recorder.enabled' || a.key === 'mini.enabled') {
       if (value) windows.showRecorder()
-      else windows.hideMiniToTray(true)
+      else windows.hideRecorder(true)
     }
     return { ok: true, value }
   })
@@ -125,15 +125,18 @@ function registerAll() {
     return { ok: true }
   })
 
-  // mini
+  // recorder
+  registerHandler(IPC.RECORDER_HIDE, () => {
+    windows.hideRecorder(true)
+    return { ok: true }
+  })
+  registerHandler(IPC.RECORDER_SET_POS, (a) => windows.setRecorderPos(a.x, a.y))
+  // legacy mini aliases
   registerHandler(IPC.MINI_HIDE, () => {
-    windows.hideMiniToTray(true)
+    windows.hideRecorder(true)
     return { ok: true }
   })
-  registerHandler(IPC.MINI_SET_POS, (a) => {
-    windows.setMiniPos(a.x, a.y)
-    return { ok: true }
-  })
+  registerHandler(IPC.MINI_SET_POS, (a) => windows.setRecorderPos(a.x, a.y))
   // tagpicker
   registerHandler(IPC.TAGPICKER_CANCEL, () => {
     windows.closeTagPicker()
