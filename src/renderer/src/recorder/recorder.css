@@ -135,15 +135,15 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
 
 .collapsed .recorder {
   -webkit-app-region: no-drag;
-  left: 6px;
-  right: 6px;
-  bottom: 6px;
+  left: 0;
+  right: 0;
+  bottom: 0;
   height: 54px;
   padding: 8px 14px;
   border-radius: 999px;
-  background: radial-gradient(circle at 20% 20%, rgba(240,198,116,.18), transparent 32%), rgba(31, 34, 40, 0.96);
-  border-color: rgba(240,198,116,.62);
-  box-shadow: 0 10px 28px rgba(0,0,0,.52), 0 0 18px rgba(240,198,116,.16);
+  background: #202329;
+  border-color: transparent;
+  box-shadow: none;
   justify-content: center;
   animation: timePulse 2.8s ease-in-out infinite;
 }
@@ -173,6 +173,6 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
   text-shadow: 0 0 14px rgba(240,198,116,.26);
 }
 @keyframes timePulse {
-  0%, 100% { box-shadow: 0 10px 28px rgba(0,0,0,.52), 0 0 14px rgba(240,198,116,.12); }
-  50% { box-shadow: 0 10px 30px rgba(0,0,0,.58), 0 0 24px rgba(240,198,116,.24); }
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(240,198,116,.10)); }
+  50% { filter: drop-shadow(0 0 8px rgba(240,198,116,.20)); }
 }

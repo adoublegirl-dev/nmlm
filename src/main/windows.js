@@ -10,8 +10,8 @@ let reminderWin = null
 
 const RECORDER_WIDTH = 380
 const RECORDER_HEIGHT = 260
-const RECORDER_COLLAPSED_WIDTH = 192
-const RECORDER_COLLAPSED_HEIGHT = 66
+const RECORDER_COLLAPSED_WIDTH = 176
+const RECORDER_COLLAPSED_HEIGHT = 54
 const DIST_URL = () => `http://127.0.0.1:${require('./services/settings').get('server.port')}`
 
 function loadRenderer(win, file) {
@@ -101,6 +101,30 @@ function setRecorderMenuOpen(open) {
   return { ok: true, open }
 }
 
+function roundedCapsuleShape(width, height) {
+  const r = Math.floor(height / 2)
+  const rects = []
+  for (let y = 0; y < height; y++) {
+    const dy = Math.abs(y + 0.5 - r)
+    let inset = 0
+    if (dy > 0) {
+      const x = Math.sqrt(Math.max(0, r * r - dy * dy))
+      inset = Math.max(0, Math.ceil(r - x))
+    }
+    rects.push({ x: inset, y, width: width - inset * 2, height: 1 })
+  }
+  return rects
+}
+
+function applyRecorderShape(collapsed, width, height) {
+  if (!recorderWin || typeof recorderWin.setShape !== 'function') return
+  try {
+    recorderWin.setShape(collapsed ? roundedCapsuleShape(width, height) : [])
+  } catch (_) {
+    // setShape 在部分 Electron/Windows 组合上可能不可用，失败时退回透明窗口。
+  }
+}
+
 function setRecorderCollapsed(collapsed) {
   if (!recorderWin || recorderWin.isDestroyed()) return { ok: false, error: '记录器未创建' }
   const b = recorderWin.getBounds()
@@ -109,6 +133,7 @@ function setRecorderCollapsed(collapsed) {
   const width = collapsed ? RECORDER_COLLAPSED_WIDTH : RECORDER_WIDTH
   const height = collapsed ? RECORDER_COLLAPSED_HEIGHT : RECORDER_HEIGHT
   recorderWin.setBounds({ x: right - width, y: bottom - height, width, height })
+  applyRecorderShape(collapsed, width, height)
   if (!collapsed) recorderWin.webContents.send(EVENTS.RECORDER_EXPAND, { collapsed: false })
   return { ok: true, collapsed, width, height }
 }

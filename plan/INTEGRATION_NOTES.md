@@ -92,4 +92,5 @@ npm run dev                 # 构建后启动 electron
 - 2026-08-10（记录器 UI 精简）：用户确认核心功能可用后，要求记录器更横向精简。窗口宽度改为 380；布局压成两行，主行包含 HH:MM:SS、开始/暂停合一按钮、停止按钮、最右侧窄标签下拉；按钮为图标式，title 悬浮提示名称。标签下拉改为自定义 dropdown：平时按钮宽 112，展开菜单宽 250，长标签单行省略不换行；菜单作为透明窗口承载层里的外层浮层显示在记录器上方，不再撑大记录器视觉框子。
 - 2026-08-10（记录器自动收缩）：新增 5 秒无操作自动收缩为“时间胶囊”状态，仅显示 HH:MM:SS；鼠标移入自动恢复完整记录器。收缩态窗口实际缩到 176×54，完整态恢复 380×260，保持右下角不漂移。菜单打开时禁止自动收缩。视觉动效包括内容淡出、胶囊圆角、淡金呼吸光效、时间居中与尺寸过渡。
 - 2026-08-10（收缩态 bug 修复）：修复 F8 触发后窗口尺寸展开但前端 collapsed 样式未同步、以及胶囊态鼠标移入无法恢复的问题。新增 EVENTS.RECORDER_EXPAND，windows.setRecorderCollapsed(false) 时向 recorder 页面发送 recorder:expand；前端收到后仅更新 DOM 状态不反向同步窗口，避免循环。collapsed 态取消 -webkit-app-region: drag，优先保证 mouseenter/mousedown 可唤醒。
-- 2026-08-10（F8 不唤醒 + 胶囊边角）：用户反馈胶囊态按 F8 仍会变长，且透明窗口四角有浅/深脏边。修复：F8 start/pause 分支不再调用 showRecorder，快捷键只改记录状态，不唤醒 UI；收缩窗口尺寸从 176×54 调整为 192×66，胶囊本体 inset 6px（left/right/bottom），避免 CSS 圆角贴住 native 透明窗口边界；主 recorder BrowserWindow 增加 backgroundColor '#00000000'。
+- 2026-08-10（F8 不唤醒 + 胶囊边角）：用户反馈胶囊态按 F8 仍会变长，且透明窗口四角有浅/深脏边。修复：F8 start/pause 分支不再调用 showRecorder，快捷键只改记录状态，不唤醒 UI；主 recorder BrowserWindow 增加 backgroundColor '#00000000'。
+- 2026-08-10（胶囊漏边修复）：用户反馈 inset 后从漏角变成漏边。改为 native window shape：收缩态恢复 176×54，使用 BrowserWindow.setShape 逐行矩形近似圆角胶囊裁剪窗口本身，完整态 setShape([]) 恢复。CSS 收缩态不再留透明 inset，去除外阴影/边框，背景改纯 #202329，保留轻微 filter 呼吸光效，避免透明窗口边缘合成脏边。
