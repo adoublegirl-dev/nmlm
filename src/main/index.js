@@ -143,11 +143,7 @@ function buildActions() {
   return {
     openRecorder: () => windows.showRecorder(),
     hideRecorder: () => windows.hideRecorder(true),
-    toggleRecord: () => {
-      const current = ledger.current()
-      if (current) return onStopShortcut()
-      return onStartShortcut()
-    },
+    toggleRecord: () => onStartShortcut(),
     screenshot: () => evidence.capture(),
     pack: () => {
       const { BrowserWindow, Notification } = require('electron')
@@ -174,12 +170,17 @@ async function onStartShortcut() {
     new Notification({ title: '牛马联盟', body: '没有可用标签，请先在设置里创建标签' }).show()
     return { ok: false, error: '没有可用标签' }
   }
-  if (ledger.current()) {
-    const r = await ledger.stop({})
+  const current = ledger.current()
+  if (current && current.paused) {
+    const r = await ledger.start({ tagId: tag.id })
+    console.log(`[niuma] resume result: ok=${r.ok}${r.entry ? ` id=${r.entry.id}` : ''}${r.error ? ` error=${r.error}` : ''}`)
+    if (r.ok) tray.setState('recording')
+    return r
+  }
+  if (current) {
+    const r = await ledger.pause({})
     console.log(`[niuma] pause result: ok=${r.ok}${r.entry ? ` id=${r.entry.id}` : ''}${r.error ? ` error=${r.error}` : ''}`)
-    if (r.ok) {
-      tray.setState('idle')
-    }
+    if (r.ok) tray.setState('idle')
     return r
   }
   const r = await ledger.start({ tagId: tag.id })

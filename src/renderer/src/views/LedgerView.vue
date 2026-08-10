@@ -154,9 +154,12 @@ async function load() {
       e.endText = e.end_time ? formatTime(e.end_time) : '…'
       maxDur = Math.max(maxDur, e.duration_sec || 0)
     }
-    // 未完成记录实时刷新
+    // 未完成记录实时刷新；暂停态停在 paused_at，避免视觉上继续跳秒。
     for (const e of raw) {
-      if (!e.end_time) e.durText = formatDuration(Math.floor((Date.now() - e.start_time) / 1000))
+      if (!e.end_time) {
+        const endAt = e.paused ? e.paused_at : Date.now()
+        e.durText = formatDuration(Math.floor((endAt - e.start_time) / 1000))
+      }
     }
     for (const e of raw) {
       e.widthPct = maxDur ? Math.max(2, Math.round(((e.duration_sec || 0) / maxDur) * 100)) : 0

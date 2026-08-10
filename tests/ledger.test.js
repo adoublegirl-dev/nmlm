@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createRequire } from 'module'
 
 // 用原生 require 加载 CJS 服务层，保证与模块内部 require 共享同一实例缓存
@@ -14,9 +14,14 @@ const { entriesRepo, pausePointsRepo } = db
 
 // 每个用例用独立内存库；窗口采集替换为空实现（避免真调 PowerShell 与缓存干扰）
 beforeEach(() => {
+  vi.useRealTimers()
   db.init(':memory:')
   ledger.attachEventSender(() => {})
   require('../src/main/utils/window').getActiveWindow = () => Promise.resolve(null)
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 describe('ledger 状态机', () => {
@@ -57,15 +62,63 @@ describe('ledger 状态机', () => {
     expect(r.ok).toBe(false)
   })
 
-  it('pause 归档旧段并新建记录', async () => {
-    await ledger.start()
+  it('pause 不归档旧段，只写暂停点并进入暂停态', async () => {
+    await ledger.start({ tagId: 1 })
     const r = await ledger.pause()
     expect(r.ok).toBe(true)
     const cur = ledger.current()
     expect(cur.id).toBe(r.entry.id)
-    // 旧段已归档
+    expect(cur.paused).toBe(true)
     const all = entriesRepo.listByRange(0, Date.now() + 1000)
-    expect(all.length).toBe(2)
+    expect(all.length).toBe(1)
+    expect(all[0].end_time).toBeNull()
+    expect(pausePointsRepo.listByEntry(cur.id).length).toBe(1)
+  })
+
+  it('暂停后同标签继续，沿用原记录且不产生断档', async () => {
+    const base = 1786300000000
+    vi.useFakeTimers()
+    vi.setSystemTime(base)
+    const started = await ledger.start({ tagId: 1 })
+    vi.setSystemTime(base + 10 * 60 * 1000)
+    await ledger.pause()
+    vi.setSystemTime(base + 15 * 60 * 1000)
+    const resumed = await ledger.start({ tagId: 1 })
+    expect(resumed.ok).toBe(true)
+    expect(resumed.entry.id).toBe(started.entry.id)
+    expect(resumed.entry.paused).toBe(false)
+    vi.setSystemTime(base + 30 * 60 * 1000)
+    await ledger.complete({})
+    const rows = entriesRepo.listByRange(base - 1, base + 31 * 60 * 1000)
+    expect(rows.length).toBe(1)
+    expect(rows[0].start_time).toBe(base)
+    expect(rows[0].end_time).toBe(base + 30 * 60 * 1000)
+    expect(rows[0].duration_sec).toBe(1800)
+    expect(pausePointsRepo.listByEntry(rows[0].id).length).toBe(1)
+  })
+
+  it('暂停后换标签继续，从暂停点切新记录且两段连续', async () => {
+    const base = 1786300000000
+    vi.useFakeTimers()
+    vi.setSystemTime(base)
+    const started = await ledger.start({ tagId: 1 })
+    vi.setSystemTime(base + 10 * 60 * 1000)
+    await ledger.pause()
+    vi.setSystemTime(base + 15 * 60 * 1000)
+    const resumed = await ledger.start({ tagId: 2 })
+    expect(resumed.ok).toBe(true)
+    expect(resumed.split).toBe(true)
+    expect(resumed.finished.id).toBe(started.entry.id)
+    vi.setSystemTime(base + 30 * 60 * 1000)
+    await ledger.complete({})
+    const rows = entriesRepo.listByRange(base - 1, base + 31 * 60 * 1000)
+    expect(rows.length).toBe(2)
+    expect(rows[0].tag_id).toBe(1)
+    expect(rows[0].start_time).toBe(base)
+    expect(rows[0].end_time).toBe(base + 10 * 60 * 1000)
+    expect(rows[1].tag_id).toBe(2)
+    expect(rows[1].start_time).toBe(base + 10 * 60 * 1000)
+    expect(rows[1].end_time).toBe(base + 30 * 60 * 1000)
   })
 
   it('recover 归档崩溃残留', () => {

@@ -4,9 +4,26 @@ const { FRAGMENT_THRESHOLD_SEC } = require('../../shared/constants')
 const winUtil = require('../utils/window')
 
 let emitter = null
+let pausedSession = null // { entryId, pointId, pausedAt }
 
 function attachEventSender(fn) { emitter = fn }
 function emit(state, entry) { if (emitter) emitter({ state, entry }) }
+
+function rawCurrent() {
+  return entriesRepo.current() || null
+}
+
+function decoratePaused(entry) {
+  if (!entry) {
+    pausedSession = null
+    return null
+  }
+  if (pausedSession && pausedSession.entryId === entry.id) {
+    return { ...entry, paused: true, paused_at: pausedSession.pausedAt, pause_point_id: pausedSession.pointId }
+  }
+  if (pausedSession && pausedSession.entryId !== entry.id) pausedSession = null
+  return { ...entry, paused: false }
+}
 
 function validTagId(tagId) {
   if (tagId == null) return null
@@ -31,28 +48,33 @@ async function finishEntry(entry, { tagId, detail, endTime = Date.now(), state =
   return updated
 }
 
-// 旧接口：开始一个未标记段
+// 旧接口：开始一个未标记段；如果当前处于暂停态，则转为“继续”。
 async function start({ tagId = null, detail = null } = {}) {
-  if (entriesRepo.current()) return { ok: false, error: '已在记录中' }
-  const entry = entriesRepo.insert({ startTime: Date.now(), tagId: validTagId(tagId), detail })
+  const finalTagId = validTagId(tagId)
+  if (tagId != null && finalTagId == null) return { ok: false, error: '标签不存在' }
+  const cur = rawCurrent()
+  if (cur) {
+    if (pausedSession && pausedSession.entryId === cur.id) return resume({ tagId: finalTagId ?? cur.tag_id, detail })
+    return { ok: false, error: '已在记录中' }
+  }
+  const entry = entriesRepo.insert({ startTime: Date.now(), tagId: finalTagId, detail })
+  pausedSession = null
   emit('recording', entry)
-  return { ok: true, entry }
+  return { ok: true, entry: decoratePaused(entry) }
 }
 
 // 旧接口：结束当前段。默认保留当前标签/备注；传 tagId/detail 时覆盖
 async function stop({ tagId, detail } = {}) {
-  const cur = entriesRepo.current()
-  if (!cur) return { ok: false, error: '没有进行中的记录' }
-  const entry = await finishEntry(cur, { tagId, detail, state: 'idle' })
-  return { ok: true, entry }
+  return complete({ tagId, detail })
 }
 
 // 新接口：任务播放器“开始/切换任务”。若已有任务，自动结束上一段，再开启新段
 async function switchTask({ tagId = null, detail = null } = {}) {
   const finalTagId = validTagId(tagId)
   if (tagId != null && finalTagId == null) return { ok: false, error: '标签不存在' }
+  const previous = rawCurrent()
+  if (previous && pausedSession && pausedSession.entryId === previous.id) return resume({ tagId: finalTagId, detail })
   const now = Date.now()
-  const previous = entriesRepo.current()
   let finished = null
   if (previous) finished = await finishEntry(previous, { endTime: now, state: 'switched' })
   const win = await winUtil.getActiveWindow().catch(() => null)
@@ -62,29 +84,78 @@ async function switchTask({ tagId = null, detail = null } = {}) {
     detail,
     windowTitle: win ? win.title : null
   })
+  pausedSession = null
   emit('recording', entry)
-  return { ok: true, entry, finished }
+  return { ok: true, entry: decoratePaused(entry), finished }
 }
 
 // 新接口：完成当前任务，不开启新任务
-async function complete({ detail } = {}) {
-  const cur = entriesRepo.current()
+async function complete({ tagId, detail } = {}) {
+  const cur = rawCurrent()
   if (!cur) return { ok: false, error: '没有进行中的任务' }
-  const entry = await finishEntry(cur, { detail, state: 'completed' })
+  const endTime = pausedSession && pausedSession.entryId === cur.id ? pausedSession.pausedAt : Date.now()
+  if (pausedSession && pausedSession.entryId === cur.id && pausedSession.pointId) pausePointsRepo.remove(pausedSession.pointId)
+  pausedSession = null
+  const entry = await finishEntry(cur, { tagId, detail, endTime, state: 'completed' })
   return { ok: true, entry }
 }
 
-// 暂停：保留旧语义，切出一段未标记的新记录。新 UI 主要使用 addPausePoint
-async function pause() {
-  const cur = entriesRepo.current()
+// F8 暂停：不结束当前记录，只在时间轴上留下一个暂停点，并进入暂停态。
+async function pause({ detail = null } = {}) {
+  const cur = rawCurrent()
   if (!cur) return { ok: false, error: '没有进行中的记录' }
-  await finishEntry(cur, { state: 'paused' })
-  const entry = entriesRepo.insert({ startTime: Date.now(), tagId: cur.tag_id, detail: cur.detail })
-  emit('recording', entry)
-  return { ok: true, entry }
+  if (pausedSession && pausedSession.entryId === cur.id) return { ok: true, entry: decoratePaused(cur), paused: true }
+  const pausedAt = Date.now()
+  const point = pausePointsRepo.insert({ entryId: cur.id, ts: pausedAt, detail, tagId: cur.tag_id })
+  pausedSession = { entryId: cur.id, pointId: point.id, pausedAt }
+  const entry = decoratePaused(cur)
+  emit('paused', { entry, point })
+  return { ok: true, entry, point, paused: true }
 }
 
-function current() { return entriesRepo.current() || null }
+async function resume({ tagId = null, detail = null } = {}) {
+  const cur = rawCurrent()
+  if (!cur) return { ok: false, error: '没有可继续的记录' }
+  if (!pausedSession || pausedSession.entryId !== cur.id) return { ok: true, entry: decoratePaused(cur), resumed: false }
+  const finalTagId = tagId == null ? cur.tag_id : validTagId(tagId)
+  if (tagId != null && finalTagId == null) return { ok: false, error: '标签不存在' }
+  const pausedAt = pausedSession.pausedAt
+  const pointId = pausedSession.pointId
+
+  if (Number(finalTagId) === Number(cur.tag_id)) {
+    pausedSession = null
+    const entry = decoratePaused(entriesRepo.get(cur.id))
+    emit('recording', entry)
+    return { ok: true, entry, resumed: true, split: false }
+  }
+
+  const win = await winUtil.getActiveWindow().catch(() => null)
+  const durationSec = Math.max(0, Math.floor((pausedAt - cur.start_time) / 1000))
+  const tx = getDb().transaction(() => {
+    pausePointsRepo.remove(pointId)
+    const finished = entriesRepo.finish(cur.id, {
+      endTime: pausedAt,
+      durationSec,
+      tagId: cur.tag_id,
+      detail: cur.detail,
+      windowTitle: win ? win.title : cur.window_title,
+      isFragment: durationSec < FRAGMENT_THRESHOLD_SEC ? 1 : 0
+    })
+    const entry = entriesRepo.insert({
+      startTime: pausedAt,
+      tagId: finalTagId,
+      detail,
+      windowTitle: win ? win.title : null
+    })
+    return { finished, entry }
+  })
+  const result = tx()
+  pausedSession = null
+  emit('recording', result.entry)
+  return { ok: true, entry: decoratePaused(result.entry), finished: result.finished, resumed: true, split: true }
+}
+
+function current() { return decoratePaused(rawCurrent()) }
 
 function retag(id, { tagId = null, detail = null } = {}) {
   const entry = entriesRepo.get(id)
@@ -193,6 +264,7 @@ function applyPausePointTag({ entryId, pointId, tagId = null } = {}) {
 }
 
 function recover(now = Date.now()) {
+  pausedSession = null
   const unfinished = entriesRepo.allUnfinished()
   for (const e of unfinished) {
     const other = tagsRepo.findOtherTag()
@@ -216,6 +288,7 @@ module.exports = {
   switchTask,
   complete,
   pause,
+  resume,
   current,
   listByRange,
   retag,

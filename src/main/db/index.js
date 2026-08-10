@@ -131,6 +131,10 @@ const pausePointsRepo = {
     getDb().prepare('UPDATE pause_points SET tag_id = ? WHERE id = ?').run(tagId, id)
     return this.get(id)
   },
+  remove(id) {
+    getDb().prepare('DELETE FROM pause_points WHERE id = ?').run(id)
+    return { ok: true }
+  },
   removeByEntry(entryId) {
     getDb().prepare('DELETE FROM pause_points WHERE entry_id = ?').run(entryId)
     return { ok: true }

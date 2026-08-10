@@ -120,8 +120,10 @@ async function refresh() {
   const r = await api('ledger:current')
   current = r.entry || null
   if (current) {
+    paused = !!current.paused
+    if (current.tag_id && !paused) selectedTagId = current.tag_id
+  } else {
     paused = false
-    if (current.tag_id) selectedTagId = current.tag_id
   }
   render()
 }
@@ -133,17 +135,18 @@ function render() {
 
   renderTagButton()
   if (current) {
-    timer.textContent = hms((Date.now() - current.start_time) / 1000)
-    toggleBtn.textContent = 'Ⅱ'
-    toggleBtn.title = '暂停'
+    const end = current.paused ? current.paused_at : Date.now()
+    timer.textContent = hms((end - current.start_time) / 1000)
+    toggleBtn.textContent = current.paused ? '▶' : 'Ⅱ'
+    toggleBtn.title = current.paused ? '继续' : '暂停'
     toggleBtn.disabled = false
     stopBtn.disabled = false
   } else {
     timer.textContent = '00:00:00'
     toggleBtn.textContent = '▶'
-    toggleBtn.title = paused ? '继续' : '开始'
+    toggleBtn.title = '开始'
     toggleBtn.disabled = false
-    stopBtn.disabled = !paused
+    stopBtn.disabled = true
   }
 }
 
@@ -163,7 +166,7 @@ async function startRecord() {
 
 async function pauseRecord() {
   if (!current) return
-  const r = await api('ledger:stop', {})
+  const r = await api('ledger:pause', {})
   if (!r.ok) return alert(r.error || '暂停失败')
   paused = true
   await refresh()
@@ -182,6 +185,7 @@ async function stopRecord() {
 }
 
 async function toggleRecord() {
+  if (current?.paused) return startRecord()
   if (current) return pauseRecord()
   return startRecord()
 }
