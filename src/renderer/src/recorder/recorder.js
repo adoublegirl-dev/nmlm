@@ -9,17 +9,14 @@ app.innerHTML = `
       <button id="hide" class="close-btn no-drag" title="隐藏到托盘">×</button>
     </div>
 
-    <div id="timer" class="timer num">00:00:00</div>
-
-    <div class="field no-drag">
-      <label>标签</label>
-      <select id="tagSelect" class="select"></select>
-    </div>
-
-    <div class="buttons no-drag">
-      <button id="startBtn" class="btn primary">开始</button>
-      <button id="pauseBtn" class="btn">暂停</button>
-      <button id="stopBtn" class="btn danger">停止</button>
+    <div class="main-row no-drag">
+      <div id="timer" class="timer num">00:00:00</div>
+      <div id="tagDropdown" class="tag-dropdown">
+        <button id="tagButton" class="tag-button" title="选择标签">标签</button>
+        <div id="tagMenu" class="tag-menu hidden"></div>
+      </div>
+      <button id="toggleBtn" class="icon-action primary" title="开始">▶</button>
+      <button id="stopBtn" class="icon-action danger" title="停止">■</button>
     </div>
   </div>
 `
@@ -28,6 +25,7 @@ let tags = []
 let current = null
 let selectedTagId = null
 let paused = false
+let menuOpen = false
 
 function pad(n) { return String(n).padStart(2, '0') }
 function hms(sec) {
@@ -46,6 +44,7 @@ async function loadSettings() {
 async function saveSelectedTag(id) {
   selectedTagId = id
   await api('settings:set', { key: 'recorder.selectedTagId', value: id }).catch(() => {})
+  renderTagButton()
 }
 
 async function loadTags() {
@@ -56,10 +55,40 @@ async function loadTags() {
   renderTags()
 }
 
+function currentTag() {
+  return tags.find((t) => t.id === Number(selectedTagId)) || null
+}
+
+function renderTagButton() {
+  const btn = document.getElementById('tagButton')
+  const tag = currentTag()
+  btn.textContent = tag ? tag.name : '标签'
+  btn.title = tag ? tag.name : '选择标签'
+}
+
 function renderTags() {
-  const sel = document.getElementById('tagSelect')
-  sel.innerHTML = tags.map((t) => `<option value="${t.id}">${t.name}</option>`).join('')
-  if (selectedTagId) sel.value = String(selectedTagId)
+  renderTagButton()
+  const menu = document.getElementById('tagMenu')
+  menu.innerHTML = tags.map((t) => `
+    <button class="tag-option" data-id="${t.id}" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}</button>
+  `).join('')
+  menu.querySelectorAll('.tag-option').forEach((b) => {
+    b.addEventListener('click', () => {
+      saveSelectedTag(Number(b.dataset.id))
+      setMenu(false)
+    })
+  })
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]))
+}
+
+function setMenu(open) {
+  menuOpen = open
+  document.getElementById('tagMenu').classList.toggle('hidden', !open)
+  document.getElementById('tagDropdown').classList.toggle('open', open)
+  api('recorder:setMenuOpen', { open }).catch(() => {})
 }
 
 async function refresh() {
@@ -67,38 +96,34 @@ async function refresh() {
   current = r.entry || null
   if (current) {
     paused = false
-    if (current.tag_id) {
-      selectedTagId = current.tag_id
-      const sel = document.getElementById('tagSelect')
-      if (sel) sel.value = String(current.tag_id)
-    }
+    if (current.tag_id) selectedTagId = current.tag_id
   }
   render()
 }
 
 function render() {
   const timer = document.getElementById('timer')
-  const startBtn = document.getElementById('startBtn')
-  const pauseBtn = document.getElementById('pauseBtn')
+  const toggleBtn = document.getElementById('toggleBtn')
   const stopBtn = document.getElementById('stopBtn')
 
+  renderTagButton()
   if (current) {
     timer.textContent = hms((Date.now() - current.start_time) / 1000)
-    startBtn.textContent = '记录中'
-    startBtn.disabled = true
-    pauseBtn.disabled = false
+    toggleBtn.textContent = 'Ⅱ'
+    toggleBtn.title = '暂停'
+    toggleBtn.disabled = false
     stopBtn.disabled = false
   } else {
     timer.textContent = '00:00:00'
-    startBtn.textContent = paused ? '继续' : '开始'
-    startBtn.disabled = false
-    pauseBtn.disabled = true
-    stopBtn.disabled = true
+    toggleBtn.textContent = '▶'
+    toggleBtn.title = paused ? '继续' : '开始'
+    toggleBtn.disabled = false
+    stopBtn.disabled = !paused
   }
 }
 
 function selectedTag() {
-  return Number(document.getElementById('tagSelect').value || selectedTagId || 0) || null
+  return Number(selectedTagId || 0) || null
 }
 
 async function startRecord() {
@@ -120,18 +145,32 @@ async function pauseRecord() {
 }
 
 async function stopRecord() {
-  if (!current) return
+  if (!current) {
+    paused = false
+    render()
+    return
+  }
   const r = await api('ledger:complete', {})
   if (!r.ok) return alert(r.error || '停止失败')
   paused = false
   await refresh()
 }
 
-document.getElementById('tagSelect').addEventListener('change', (e) => saveSelectedTag(Number(e.target.value)))
-document.getElementById('startBtn').addEventListener('click', startRecord)
-document.getElementById('pauseBtn').addEventListener('click', pauseRecord)
+async function toggleRecord() {
+  if (current) return pauseRecord()
+  return startRecord()
+}
+
+document.getElementById('tagButton').addEventListener('click', () => setMenu(!menuOpen))
+document.getElementById('toggleBtn').addEventListener('click', toggleRecord)
 document.getElementById('stopBtn').addEventListener('click', stopRecord)
-document.getElementById('hide').addEventListener('click', () => api('recorder:hide'))
+document.getElementById('hide').addEventListener('click', () => {
+  setMenu(false)
+  api('recorder:hide')
+})
+document.addEventListener('click', (e) => {
+  if (!document.getElementById('tagDropdown').contains(e.target)) setMenu(false)
+})
 
 on('ledger:state-changed', refresh)
 

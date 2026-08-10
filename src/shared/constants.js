@@ -57,6 +57,7 @@ const IPC = {
   // recorder
   RECORDER_HIDE: 'recorder:hide',
   RECORDER_SET_POS: 'recorder:setPos',
+  RECORDER_SET_MENU_OPEN: 'recorder:setMenuOpen',
   // legacy mini dock aliases
   MINI_HIDE: 'mini:hide',
   MINI_SET_POS: 'mini:setPos',

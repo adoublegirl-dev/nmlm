@@ -7,8 +7,9 @@ let recorderWin = null
 let tagPickerWin = null
 let reminderWin = null
 
-const RECORDER_WIDTH = 280
-const RECORDER_HEIGHT = 160
+const RECORDER_WIDTH = 380
+const RECORDER_HEIGHT = 86
+const RECORDER_MENU_HEIGHT = 260
 const DIST_URL = () => `http://127.0.0.1:${require('./services/settings').get('server.port')}`
 
 function loadRenderer(win, file) {
@@ -33,7 +34,7 @@ function createRecorder() {
     minWidth: RECORDER_WIDTH,
     maxWidth: RECORDER_WIDTH,
     minHeight: RECORDER_HEIGHT,
-    maxHeight: RECORDER_HEIGHT,
+    maxHeight: RECORDER_MENU_HEIGHT,
     x: pos.x,
     y: pos.y,
     frame: false,
@@ -64,8 +65,8 @@ function createRecorder() {
   recorderWin.on('resize', () => {
     if (!recorderWin || recorderWin.isDestroyed()) return
     const b = recorderWin.getBounds()
-    if (b.width !== RECORDER_WIDTH || b.height !== RECORDER_HEIGHT) {
-      recorderWin.setBounds({ ...b, width: RECORDER_WIDTH, height: RECORDER_HEIGHT })
+    if (b.width !== RECORDER_WIDTH) {
+      recorderWin.setBounds({ ...b, width: RECORDER_WIDTH })
     }
   })
   loadRenderer(recorderWin, 'recorder.html')
@@ -80,7 +81,7 @@ function showRecorder() {
   if (!recorderWin || recorderWin.isDestroyed()) createRecorder()
   if (!recorderWin) return
   settings.set('recorder.hiddenToTray', false)
-  recorderWin.setSize(RECORDER_WIDTH, RECORDER_HEIGHT)
+  setRecorderMenuOpen(false)
   recorderWin.show()
   recorderWin.focus()
 }
@@ -98,12 +99,22 @@ function isRecorderVisible() {
 }
 function isMiniVisible() { return isRecorderVisible() }
 
+function setRecorderMenuOpen(open) {
+  if (!recorderWin || recorderWin.isDestroyed()) return { ok: false, error: '记录器未创建' }
+  const b = recorderWin.getBounds()
+  const targetHeight = open ? RECORDER_MENU_HEIGHT : RECORDER_HEIGHT
+  const bottom = b.y + b.height
+  recorderWin.setBounds({ x: b.x, y: bottom - targetHeight, width: RECORDER_WIDTH, height: targetHeight })
+  return { ok: true, open, height: targetHeight }
+}
+
 function setRecorderPos(x, y) {
   if (!recorderWin || recorderWin.isDestroyed()) return { ok: false, error: '记录器未创建' }
   const { workArea } = screen.getPrimaryDisplay()
+  const b = recorderWin.getBounds()
   const cx = Math.min(Math.max(x, workArea.x - RECORDER_WIDTH + 40), workArea.x + workArea.width - 40)
   const cy = Math.min(Math.max(y, workArea.y), workArea.y + workArea.height - 40)
-  recorderWin.setBounds({ x: cx, y: cy, width: RECORDER_WIDTH, height: RECORDER_HEIGHT })
+  recorderWin.setBounds({ x: cx, y: cy, width: RECORDER_WIDTH, height: b.height || RECORDER_HEIGHT })
   settings.set('recorder.position', { x: cx, y: cy })
   return { ok: true, x: cx, y: cy }
 }
@@ -169,6 +180,7 @@ module.exports = {
   hideRecorder,
   isRecorderVisible,
   setRecorderPos,
+  setRecorderMenuOpen,
   // 兼容旧名字，避免外围调用崩
   getMini,
   hideMiniToTray,

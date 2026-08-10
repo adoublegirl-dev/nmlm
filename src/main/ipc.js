@@ -139,6 +139,7 @@ function registerAll() {
     return { ok: true }
   })
   registerHandler(IPC.RECORDER_SET_POS, (a) => windows.setRecorderPos(a.x, a.y))
+  registerHandler(IPC.RECORDER_SET_MENU_OPEN, (a) => windows.setRecorderMenuOpen(!!a.open))
   // legacy mini aliases
   registerHandler(IPC.MINI_HIDE, () => {
     windows.hideRecorder(true)
