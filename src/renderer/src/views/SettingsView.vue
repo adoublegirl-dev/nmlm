@@ -253,6 +253,10 @@ function onKeyDown(e) {
   const key = e.key.length === 1 ? e.key.toUpperCase() : e.key
   const combo = [...mods, key].join('+')
   if (mods.length === 0) return
+  if (/Shift\+[0-9]$/.test(combo)) {
+    alert('Shift + 数字 在 Windows 全局快捷键里不稳定，建议用 Ctrl+Alt+数字。')
+    return
+  }
   finishRecord(combo)
 }
 

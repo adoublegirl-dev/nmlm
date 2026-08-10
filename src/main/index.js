@@ -60,11 +60,11 @@ if (!gotLock) {
 
     // 7. 快捷键
     const failed = shortcut.registerAll({
-      start: () => windows.showTaskPicker(),
-      stop: () => onStopShortcut(),
-      screenshot: () => evidenceCapture(),
-      pack: () => actions.pack(),
-      openPanel: () => actions.openPanel()
+      start: () => { console.log('[niuma] 快捷键触发: start'); windows.showTaskPicker() },
+      stop: () => { console.log('[niuma] 快捷键触发: stop'); onStopShortcut() },
+      screenshot: () => { console.log('[niuma] 快捷键触发: screenshot'); evidenceCapture() },
+      pack: () => { console.log('[niuma] 快捷键触发: pack'); actions.pack() },
+      openPanel: () => { console.log('[niuma] 快捷键触发: openPanel'); actions.openPanel() }
     })
     if (failed.length) {
       const { Notification } = require('electron')
@@ -94,13 +94,30 @@ function ensureRuntimeToken(settings) {
 
 function normalizeShortcutSettings(settings) {
   const shortcuts = settings.get('shortcuts') || {}
+  const stableDefaults = {
+    start: 'CommandOrControl+Alt+1',
+    stop: 'CommandOrControl+Alt+2',
+    screenshot: 'CommandOrControl+Alt+3',
+    pack: 'CommandOrControl+Alt+4',
+    openPanel: 'CommandOrControl+Alt+0'
+  }
   let changed = false
   const next = { ...shortcuts }
   for (const [key, value] of Object.entries(next)) {
-    if (typeof value === 'string' && value.startsWith('Ctrl+')) {
+    if (typeof value !== 'string') continue
+    if (value.startsWith('Ctrl+')) {
       next[key] = value.replace(/^Ctrl\+/, 'CommandOrControl+')
       changed = true
     }
+    // Windows 上 Shift+数字在全局快捷键层经常被键盘布局解释成 !/@/#，注册成功但实际触发失败。
+    // 已知旧默认值统一迁移为 Ctrl/Cmd+Alt+数字。
+    if (/^CommandOrControl\+Shift\+[0-9]$/.test(next[key]) && stableDefaults[key]) {
+      next[key] = stableDefaults[key]
+      changed = true
+    }
+  }
+  for (const [key, value] of Object.entries(stableDefaults)) {
+    if (!next[key]) { next[key] = value; changed = true }
   }
   if (changed) settings.set('shortcuts', next)
 }

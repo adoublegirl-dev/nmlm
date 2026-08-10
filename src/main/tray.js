@@ -29,11 +29,11 @@ function buildMenu(actions) {
     items.push({ label: '● 记录中', enabled: false })
   }
   items.push(
-    { label: currentState === 'recording' ? '结束记录  Ctrl+Shift+2' : '开始记录  Ctrl+Shift+1', click: () => actions.toggleRecord() },
+    { label: currentState === 'recording' ? '结束记录  Ctrl+Alt+2' : '开始记录  Ctrl+Alt+1', click: () => actions.toggleRecord() },
     { label: recorderVisible ? '隐藏悬浮记录器' : '显示悬浮记录器', click: () => recorderVisible ? actions.hideRecorder() : actions.openRecorder() },
-    { label: '快捷截图  Ctrl+Shift+3', click: () => actions.screenshot() },
+    { label: '快捷截图  Ctrl+Alt+3', click: () => actions.screenshot() },
     { type: 'separator' },
-    { label: '打开浏览器面板  Ctrl+Shift+0', click: () => actions.openPanel() },
+    { label: '打开浏览器面板  Ctrl+Alt+0', click: () => actions.openPanel() },
     { label: '生成证据包', click: () => actions.pack() },
     { type: 'separator' },
     { label: '退出', click: () => actions.quit() }

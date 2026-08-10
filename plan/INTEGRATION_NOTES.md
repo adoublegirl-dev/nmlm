@@ -85,4 +85,4 @@ npm run dev                 # 构建后启动 electron
 - 2026-08-05（补丁）：迷你栏提亮（高对比边框/实背景/投影，解决浅色壁纸下看不见）；实现拖拽（mousedown/mousemove 区分点击与拖动，IPC mini:setPos 带屏幕边界 clamp）；面板主题提亮一档（--bg-deep #1a1d23）。
 - 2026-08-05（补丁2）：修四件事：① 截图空图（thumbnailSize 传真实屏幕尺寸）；② 设置页补标签管理分区（增删改/数字键/颜色/摸鱼标记）；③ 台账记录点击可编辑（改标签 + 写备注 detail，走 ledger:retag）；④ 迷你栏拖拽漂移（去掉 mousemove 基准同步）；⑤ ABI 切换方案改为 prebuild-install，npm test/dev 自动切换。
 - 2026-08-10：按新思路改为“桌面悬浮任务播放器”：开始/切换任务会自动切段，完成任务结束当前段，暂停点写 pause_points；新增 todos 表、待办浏览器管理页、到期桌面通知、MCP server（nmlm_todo_add/list/update/close/current）。19 个单元测试全绿，Electron 冒烟通过。
-- 2026-08-10（补丁）：悬浮记录器重新分层：默认紧凑态只显示当前任务/计时/主动作/更多，展开态才展示切换、完成、暂停点、打开面板，标签选择为第三层。新增设置项 mini.enabled，控制启动时是否自动显示悬浮记录器；关闭后可从托盘/启动器手动显示。暂停点在记录器中显示数量，台账页显示暂停点 chip 和时间点。快捷键改用 CommandOrControl+Shift+数字并做旧 Ctrl 配置规范化，启动日志输出注册成功/失败，失败时弹 Notification。
+- 2026-08-10（补丁）：悬浮记录器重新分层：默认紧凑态只显示当前任务/计时/主动作/更多，展开态才展示切换、完成、暂停点、打开面板，标签选择为第三层。新增设置项 mini.enabled，控制启动时是否自动显示悬浮记录器；关闭后可从托盘/启动器手动显示。暂停点在记录器中显示数量，台账页显示暂停点 chip 和时间点。快捷键先尝试过 CommandOrControl+Shift+数字，但 Windows 上 Shift+数字存在键盘布局解释问题，最终改用 CommandOrControl+Alt+数字并迁移旧配置，启动日志输出注册成功/失败，失败时弹 Notification。

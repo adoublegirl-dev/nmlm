@@ -80,11 +80,11 @@ const EVENTS = {
 const DEFAULT_SETTINGS = {
   // 快捷键：accelerator 为空字符串表示未启用
   shortcuts: {
-    start: 'CommandOrControl+Shift+1',
-    stop: 'CommandOrControl+Shift+2',
-    screenshot: 'CommandOrControl+Shift+3',
-    pack: 'CommandOrControl+Shift+4',
-    openPanel: 'CommandOrControl+Shift+0'
+    start: 'CommandOrControl+Alt+1',
+    stop: 'CommandOrControl+Alt+2',
+    screenshot: 'CommandOrControl+Alt+3',
+    pack: 'CommandOrControl+Alt+4',
+    openPanel: 'CommandOrControl+Alt+0'
   },
   reminder: {
     enabled: true,
