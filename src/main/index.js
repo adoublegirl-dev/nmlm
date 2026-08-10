@@ -95,11 +95,11 @@ function normalizeShortcutSettings(settings) {
     stop: 'F9',
     screenshot: 'F10',
     pack: '',
-    openPanel: 'F12'
+    openPanel: ''
   }
-  if (settings.get('shortcutPresetVersion') !== 'fkeys-v1') {
+  if (settings.get('shortcutPresetVersion') !== 'fkeys-v2') {
     settings.set('shortcuts', stableDefaults)
-    settings.set('shortcutPresetVersion', 'fkeys-v1')
+    settings.set('shortcutPresetVersion', 'fkeys-v2')
     return
   }
   let changed = false

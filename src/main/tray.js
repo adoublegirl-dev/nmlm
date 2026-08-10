@@ -33,7 +33,7 @@ function buildMenu(actions) {
     { label: recorderVisible ? '隐藏记录器' : '显示记录器', click: () => recorderVisible ? actions.hideRecorder() : actions.openRecorder() },
     { label: '快捷截图  F10', click: () => actions.screenshot() },
     { type: 'separator' },
-    { label: '打开浏览器面板  F12', click: () => actions.openPanel() },
+    { label: '打开浏览器面板', click: () => actions.openPanel() },
     { label: '生成证据包', click: () => actions.pack() },
     { type: 'separator' },
     { label: '退出', click: () => actions.quit() }

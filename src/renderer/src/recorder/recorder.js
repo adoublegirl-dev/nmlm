@@ -140,4 +140,6 @@ Promise.resolve()
   .then(loadTags)
   .then(refresh)
 
-setInterval(render, 1000)
+setInterval(() => {
+  refresh().catch(() => render())
+}, 1000)

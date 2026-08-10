@@ -56,7 +56,15 @@ function registerAll() {
   registerHandler(IPC.LEDGER_PAUSE_POINTS, (a) => ({ ok: true, points: ledger.listPausePointsByRange(a.start, a.end) }))
   registerHandler(IPC.LEDGER_PAUSE, () => ledger.pause())
   registerHandler(IPC.LEDGER_CURRENT, () => ({ ok: true, entry: ledger.current() }))
-  registerHandler(IPC.LEDGER_LIST, (a) => ({ ok: true, entries: ledger.listByRange(a.start, a.end) }))
+  registerHandler(IPC.LEDGER_LIST, (a) => {
+    const entries = ledger.listByRange(a.start, a.end)
+    const cur = ledger.current()
+    if (cur && cur.start_time >= a.start && cur.start_time < a.end && !entries.some((e) => e.id === cur.id)) {
+      entries.push(cur)
+      entries.sort((x, y) => x.start_time - y.start_time)
+    }
+    return { ok: true, entries }
+  })
   registerHandler(IPC.LEDGER_RECOVER, () => ({ ok: true, recovered: ledger.recover() }))
   registerHandler(IPC.LEDGER_RETAG, (a) => ledger.retag(a.id, a))
 

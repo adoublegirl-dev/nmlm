@@ -85,7 +85,7 @@ const DEFAULT_SETTINGS = {
     stop: 'F9',
     screenshot: 'F10',
     pack: '',
-    openPanel: 'F12'
+    openPanel: ''
   },
   reminder: {
     enabled: true,
