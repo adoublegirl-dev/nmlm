@@ -10,12 +10,14 @@ function currentMap() {
 
 // 注册全部快捷键（启动与配置变更时调用）
 function registerAll(handlerMap) {
+  unregisterAll()
   const map = currentMap()
   const failed = []
   for (const [name, acc] of Object.entries(map)) {
     const fn = handlerMap[name]
     if (!acc || !fn) continue
     if (!register(acc, fn)) failed.push({ name, accelerator: acc })
+    else console.log(`[niuma] 快捷键已注册: ${name} -> ${acc}`)
   }
   return failed
 }

@@ -34,8 +34,9 @@ if (!gotLock) {
     // 1. 数据库
     db.init(path.join(app.getPath('userData'), 'niuma.db'))
 
-    // 2. 初始化运行时设置（token）
+    // 2. 初始化运行时设置（token + 快捷键规范化）
     ensureRuntimeToken(settings)
+    normalizeShortcutSettings(settings)
 
     // 3. 崩溃恢复
     const recovered = ledger.recover()
@@ -52,10 +53,10 @@ if (!gotLock) {
     if (actualPort !== settings.get('server.port')) settings.set('server.port', actualPort)
     refreshLanUrls(settings)
 
-    // 6. 托盘 + 迷你栏
+    // 6. 托盘 + 悬浮记录器（是否自动显示由设置控制）
     const actions = buildActions()
     tray.create(actions)
-    windows.createMini()
+    if (settings.get('mini.enabled')) windows.createMini()
 
     // 7. 快捷键
     const failed = shortcut.registerAll({
@@ -66,7 +67,12 @@ if (!gotLock) {
       openPanel: () => actions.openPanel()
     })
     if (failed.length) {
-      for (const f of failed) console.warn(`[niuma] 快捷键冲突: ${f.accelerator}`)
+      const { Notification } = require('electron')
+      for (const f of failed) console.warn(`[niuma] 快捷键冲突: ${f.name} -> ${f.accelerator}`)
+      new Notification({
+        title: '牛马联盟 · 快捷键注册失败',
+        body: failed.map((f) => `${f.name}: ${f.accelerator}`).join('\n')
+      }).show()
     }
 
     // 8. 活动采集 + 待办提醒
@@ -86,6 +92,19 @@ function ensureRuntimeToken(settings) {
   }
 }
 
+function normalizeShortcutSettings(settings) {
+  const shortcuts = settings.get('shortcuts') || {}
+  let changed = false
+  const next = { ...shortcuts }
+  for (const [key, value] of Object.entries(next)) {
+    if (typeof value === 'string' && value.startsWith('Ctrl+')) {
+      next[key] = value.replace(/^Ctrl\+/, 'CommandOrControl+')
+      changed = true
+    }
+  }
+  if (changed) settings.set('shortcuts', next)
+}
+
 function refreshLanUrls(settings) {
   const { localIPs } = require('./server')
   settings.set('server.urls', {
@@ -101,6 +120,8 @@ function buildActions() {
   const tray = require('./tray')
   const windows = require('./windows')
   return {
+    openRecorder: () => windows.showRecorder(),
+    hideRecorder: () => windows.hideMiniToTray(true),
     toggleRecord: () => {
       const current = ledger.current()
       if (current) return onStopShortcut()

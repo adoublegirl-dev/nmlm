@@ -10,8 +10,8 @@
       <div class="actions">
         <button v-if="!recording" class="btn primary" @click="doStart">开始记录</button>
         <template v-else>
-          <button class="btn primary" @click="doStop">结束记录</button>
-          <button class="btn" @click="doPause">暂停</button>
+          <button class="btn primary" @click="doStop">完成记录</button>
+          <button class="btn" @click="doPause">暂停点</button>
         </template>
       </div>
     </div>
@@ -31,7 +31,11 @@
           <span class="tag-chip" :style="{ background: s.color + '26', color: s.color }">{{ s.tagName }}</span>
           <span class="seg-dur num">{{ s.durText }}</span>
           <span v-if="s.is_fragment" class="frag muted">碎片</span>
+          <span v-if="s.pausePoints?.length" class="pause-chip">暂停点 × {{ s.pausePoints.length }}</span>
           <span v-if="s.detail" class="seg-detail muted">{{ s.detail }}</span>
+        </div>
+        <div v-if="s.pausePoints?.length" class="pause-points">
+          <span v-for="p in s.pausePoints" :key="p.id" class="pause-dot" :title="p.detail || '暂停点'">{{ p.timeText }}</span>
         </div>
         <div class="seg-bar">
           <div class="seg-fill" :style="{ width: s.widthPct + '%', background: s.color }"></div>
@@ -93,11 +97,21 @@ function goToday() {
 
 async function load() {
   try {
-    const r = await api('ledger:list', { start: startOfDay(curDate.value), end: startOfDay(curDate.value) + DAY_MS })
+    const start = startOfDay(curDate.value)
+    const end = start + DAY_MS
+    const r = await api('ledger:list', { start, end })
+    const pointsRes = await api('ledger:pausePoints', { start, end }).catch(() => ({ points: [] }))
     const eff = await api('report:effectiveHours', { date: curDate.value })
     const raw = r.entries || []
     let maxDur = 0
+    const pointsByEntry = new Map()
+    for (const p of pointsRes.points || []) {
+      p.timeText = formatTime(p.ts)
+      if (!pointsByEntry.has(p.entry_id)) pointsByEntry.set(p.entry_id, [])
+      pointsByEntry.get(p.entry_id).push(p)
+    }
     for (const e of raw) {
+      e.pausePoints = pointsByEntry.get(e.id) || []
       e.durText = formatDuration(e.duration_sec || 0)
       e.startText = formatTime(e.start_time)
       e.endText = e.end_time ? formatTime(e.end_time) : '…'
@@ -134,11 +148,11 @@ async function doStart() {
   load()
 }
 async function doStop() {
-  await api('ledger:stop')
+  await api('ledger:complete')
   load()
 }
 async function doPause() {
-  await api('ledger:pause')
+  await api('ledger:addPausePoint')
   load()
 }
 
@@ -186,6 +200,9 @@ onBeforeUnmount(() => {
 .seg-time { font-size: 13px; color: var(--text-dim); }
 .seg-dur { font-size: 13px; font-weight: 500; }
 .frag { font-size: 12px; }
+.pause-chip { font-size: 12px; color: var(--gold); background: rgba(224,188,114,0.12); border: 1px solid rgba(224,188,114,0.28); padding: 1px 7px; border-radius: 999px; }
+.pause-points { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.pause-dot { font-size: 11px; color: var(--text-dim); border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); padding: 1px 6px; border-radius: 999px; }
 .seg-bar { height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; margin-top: 6px; overflow: hidden; }
 .seg-fill { height: 100%; border-radius: 4px; opacity: 0.75; }
 .seg-detail { margin-top: 4px; font-size: 12px; }

@@ -80,11 +80,11 @@ const EVENTS = {
 const DEFAULT_SETTINGS = {
   // 快捷键：accelerator 为空字符串表示未启用
   shortcuts: {
-    start: 'Ctrl+Shift+1',
-    stop: 'Ctrl+Shift+2',
-    screenshot: 'Ctrl+Shift+3',
-    pack: 'Ctrl+Shift+4',
-    openPanel: 'Ctrl+Shift+0'
+    start: 'CommandOrControl+Shift+1',
+    stop: 'CommandOrControl+Shift+2',
+    screenshot: 'CommandOrControl+Shift+3',
+    pack: 'CommandOrControl+Shift+4',
+    openPanel: 'CommandOrControl+Shift+0'
   },
   reminder: {
     enabled: true,
@@ -118,6 +118,7 @@ const DEFAULT_SETTINGS = {
     port: 37129
   },
   mini: {
+    enabled: true, // 启动时是否自动显示桌面悬浮记录器
     position: { x: null, y: null }, // null = 右下角默认
     hiddenToTray: false
   },

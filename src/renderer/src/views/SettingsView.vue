@@ -21,6 +21,15 @@
     </div>
 
     <div class="card section">
+      <h3>桌面悬浮记录器</h3>
+      <div class="row">
+        <span>启动时显示</span>
+        <input type="checkbox" :checked="mini.enabled" @change="setMini('enabled', $event.target.checked)" />
+        <span class="muted">关闭后不会自动挂在桌面，需要从托盘/启动器手动打开</span>
+      </div>
+    </div>
+
+    <div class="card section">
       <h3>快捷键</h3>
       <div v-for="(acc, name) in shortcuts" :key="name" class="row">
         <span>{{ labelOf(name) }}</span>
@@ -129,6 +138,7 @@ const shortcuts = ref({})
 const reminder = ref({})
 const evidence = ref({})
 const model = ref({})
+const mini = ref({})
 const tags = ref([])
 const newTag = ref({ name: '', color: '#e0bc72', key: null, isBreak: false })
 const recordingKey = ref(null)
@@ -153,6 +163,7 @@ async function load() {
   reminder.value = s.reminder || {}
   evidence.value = s.evidence || {}
   model.value = s.model || {}
+  mini.value = s.mini || {}
   const info = await api('server:info')
   urls.value = info.urls || urls.value
   token.value = info.token || token.value
@@ -169,6 +180,10 @@ async function setEvidence(key, val) {
 }
 async function setModel(key, val) {
   await api('settings:set', { key: `model.${key}`, value: val })
+}
+async function setMini(key, val) {
+  await api('settings:set', { key: `mini.${key}`, value: val })
+  mini.value[key] = val
 }
 
 async function resetToken() {
@@ -231,7 +246,7 @@ function onKeyDown(e) {
     return
   }
   const mods = []
-  if (e.ctrlKey) mods.push('Ctrl')
+  if (e.ctrlKey) mods.push('CommandOrControl')
   if (e.shiftKey) mods.push('Shift')
   if (e.altKey) mods.push('Alt')
   if (e.metaKey) mods.push('Meta')

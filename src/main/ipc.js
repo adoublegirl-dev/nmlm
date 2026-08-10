@@ -98,7 +98,14 @@ function registerAll() {
 
   // settings
   registerHandler(IPC.SETTINGS_GET_ALL, () => ({ ok: true, settings: settings.getAll() }))
-  registerHandler(IPC.SETTINGS_SET, (a) => ({ ok: true, value: settings.set(a.key, a.value) }))
+  registerHandler(IPC.SETTINGS_SET, (a) => {
+    const value = settings.set(a.key, a.value)
+    if (a.key === 'mini.enabled') {
+      if (value) windows.showRecorder()
+      else windows.hideMiniToTray(true)
+    }
+    return { ok: true, value }
+  })
 
   // server
   registerHandler(IPC.SERVER_INFO, () => {

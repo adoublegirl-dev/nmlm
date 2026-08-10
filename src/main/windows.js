@@ -6,6 +6,8 @@ const settings = require('./services/settings')
 let miniWin = null
 let tagPickerWin = null
 let reminderWin = null
+let miniReady = false
+let pendingTaskPicker = false
 
 const DIST_URL = () => `http://127.0.0.1:${require('./services/settings').get('server.port')}`
 
@@ -24,11 +26,11 @@ function miniDefaultPos(width, height) {
 
 function createMini() {
   const saved = settings.get('mini.position')
-  const defaultPos = miniDefaultPos(380, 260)
+  const defaultPos = miniDefaultPos(380, 150)
   const pos = saved && saved.x != null ? saved : defaultPos
   miniWin = new BrowserWindow({
     width: 380,
-    height: 260,
+    height: 150,
     x: pos.x,
     y: pos.y,
     frame: false,
@@ -54,9 +56,18 @@ function createMini() {
       settings.set('mini.position', { x, y })
     }, 250)
   })
+  miniReady = false
   loadRenderer(miniWin, 'mini.html')
+  miniWin.webContents.once('did-finish-load', () => {
+    miniReady = true
+    if (pendingTaskPicker) {
+      pendingTaskPicker = false
+      sendTaskPickerOpen()
+    }
+  })
   miniWin.on('closed', () => {
     miniWin = null
+    miniReady = false
   })
   return miniWin
 }
@@ -92,16 +103,35 @@ function setMiniPos(x, y) {
 function hideMiniToTray(flag) {
   settings.set('mini.hiddenToTray', flag)
   if (flag && miniWin) miniWin.hide()
-  else if (!flag && miniWin) miniWin.show()
+  else if (!flag) showRecorder()
+}
+
+function showRecorder() {
+  if (!miniWin) createMini()
+  if (!miniWin) return
+  settings.set('mini.hiddenToTray', false)
+  miniWin.show()
+  miniWin.focus()
+}
+
+function isMiniVisible() {
+  return !!(miniWin && !miniWin.isDestroyed() && miniWin.isVisible())
+}
+
+function sendTaskPickerOpen() {
+  if (!miniWin || miniWin.isDestroyed()) return
+  miniWin.webContents.send('mini:open-task-picker')
 }
 
 function showTaskPicker() {
-  if (!miniWin) createMini()
-  if (miniWin) {
-    miniWin.show()
-    miniWin.focus()
-    miniWin.webContents.send('mini:open-task-picker')
+  console.log('[niuma] 快捷键触发：打开任务选择器')
+  showRecorder()
+  if (!miniWin) return
+  if (!miniReady) {
+    pendingTaskPicker = true
+    return
   }
+  sendTaskPickerOpen()
 }
 
 // ---------- TagPicker ----------
@@ -161,4 +191,4 @@ function createReminder(payload) {
   return reminderWin
 }
 
-module.exports = { createMini, getMini, resizeMini, setMiniPos, hideMiniToTray, showTaskPicker, createTagPicker, closeTagPicker, createReminder }
+module.exports = { createMini, getMini, resizeMini, setMiniPos, hideMiniToTray, showRecorder, isMiniVisible, showTaskPicker, createTagPicker, closeTagPicker, createReminder }
