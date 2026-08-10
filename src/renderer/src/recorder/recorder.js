@@ -97,11 +97,11 @@ function setMenu(open) {
   resetIdleTimer()
 }
 
-function setCollapsed(next) {
+function setCollapsed(next, syncWindow = true) {
   if (menuOpen && next) return
   collapsed = next
   document.querySelector('.recorder-shell').classList.toggle('collapsed', collapsed)
-  api('recorder:setCollapsed', { collapsed }).catch(() => {})
+  if (syncWindow) api('recorder:setCollapsed', { collapsed }).catch(() => {})
   if (!collapsed) resetIdleTimer()
 }
 
@@ -201,6 +201,7 @@ document.addEventListener('click', (e) => {
 })
 
 on('ledger:state-changed', refresh)
+on('recorder:expand', () => setCollapsed(false, false))
 
 Promise.resolve()
   .then(loadSettings)

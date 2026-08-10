@@ -2,6 +2,7 @@
 const { BrowserWindow, screen } = require('electron')
 const path = require('path')
 const settings = require('./services/settings')
+const { EVENTS } = require('../shared/constants')
 
 let recorderWin = null
 let tagPickerWin = null
@@ -107,6 +108,7 @@ function setRecorderCollapsed(collapsed) {
   const width = collapsed ? RECORDER_COLLAPSED_WIDTH : RECORDER_WIDTH
   const height = collapsed ? RECORDER_COLLAPSED_HEIGHT : RECORDER_HEIGHT
   recorderWin.setBounds({ x: right - width, y: bottom - height, width, height })
+  if (!collapsed) recorderWin.webContents.send(EVENTS.RECORDER_EXPAND, { collapsed: false })
   return { ok: true, collapsed, width, height }
 }
 

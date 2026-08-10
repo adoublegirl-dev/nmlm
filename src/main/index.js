@@ -177,7 +177,10 @@ async function onStartShortcut() {
   if (ledger.current()) {
     const r = await ledger.stop({})
     console.log(`[niuma] pause result: ok=${r.ok}${r.entry ? ` id=${r.entry.id}` : ''}${r.error ? ` error=${r.error}` : ''}`)
-    if (r.ok) tray.setState('idle')
+    if (r.ok) {
+      tray.setState('idle')
+      if (settings.get('recorder.enabled') || settings.get('mini.enabled')) windows.showRecorder()
+    }
     return r
   }
   const r = await ledger.start({ tagId: tag.id })

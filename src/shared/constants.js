@@ -76,7 +76,8 @@ const EVENTS = {
   SETTINGS_CHANGED: 'settings:changed',
   SHORTCUT_CONFLICT: 'shortcut:conflict',
   ACTIVITY_SNAPSHOT: 'activity:snapshot',
-  TODO_CHANGED: 'todo:changed'
+  TODO_CHANGED: 'todo:changed',
+  RECORDER_EXPAND: 'recorder:expand'
 }
 
 // ---------- 默认配置 ----------

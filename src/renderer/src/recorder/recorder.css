@@ -134,7 +134,7 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
 .num { font-variant-numeric: tabular-nums; }
 
 .collapsed .recorder {
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
   height: 54px;
   padding: 8px 14px;
   border-radius: 999px;
@@ -154,13 +154,13 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
   display: none !important;
 }
 .collapsed .main-row {
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
   justify-content: center;
   gap: 0;
   transform: translateY(0);
 }
 .collapsed .timer {
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
   width: 148px;
   flex: 0 0 148px;
   text-align: center;
