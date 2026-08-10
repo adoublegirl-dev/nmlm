@@ -103,8 +103,10 @@ function registerAll() {
   registerHandler(IPC.TODOS_CREATE, (a) => todos.create(a))
   registerHandler(IPC.TODOS_UPDATE, (a) => todos.update(a))
   registerHandler(IPC.TODOS_CLOSE, (a) => todos.close(a))
+  registerHandler(IPC.TODOS_REOPEN, (a) => todos.reopen(a))
   registerHandler(IPC.TODOS_DELETE, (a) => todos.remove(a))
   registerHandler(IPC.TODOS_DUE, (a) => todos.due(a && a.now))
+  registerHandler(IPC.TODOS_SNOOZE, (a) => todos.snooze(a))
 
   // settings
   registerHandler(IPC.SETTINGS_GET_ALL, () => ({ ok: true, settings: settings.getAll() }))

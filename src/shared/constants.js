@@ -45,8 +45,10 @@ const IPC = {
   TODOS_CREATE: 'todos:create',
   TODOS_UPDATE: 'todos:update',
   TODOS_CLOSE: 'todos:close',
+  TODOS_REOPEN: 'todos:reopen',
   TODOS_DELETE: 'todos:delete',
   TODOS_DUE: 'todos:due',
+  TODOS_SNOOZE: 'todos:snooze',
   // settings
   SETTINGS_GET_ALL: 'settings:getAll',
   SETTINGS_SET: 'settings:set',

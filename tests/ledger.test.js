@@ -210,7 +210,7 @@ describe('ledger 状态机', () => {
 })
 
 describe('todos 服务', () => {
-  it('create/list/update/close', () => {
+  it('create/list/update/close/reopen/delete', () => {
     const c = todos.create({ title: '写方案', detail: '牛马联盟 P1', priority: 'high', source: 'agent' })
     expect(c.ok).toBe(true)
     expect(todos.list({}).todos.length).toBe(1)
@@ -220,6 +220,34 @@ describe('todos 服务', () => {
     expect(closed.todo.status).toBe('done')
     expect(todos.list({}).todos.length).toBe(0)
     expect(todos.list({ includeDone: true }).todos.length).toBe(1)
+    const reopened = todos.reopen({ id: c.todo.id, status: 'todo' })
+    expect(reopened.todo.status).toBe('todo')
+    const removed = todos.remove({ id: c.todo.id })
+    expect(removed.ok).toBe(true)
+    expect(todos.list({ includeDone: true }).todos.length).toBe(0)
+  })
+
+  it('校验状态、优先级、截止时间和不存在 id', () => {
+    expect(todos.create({ title: '' }).ok).toBe(false)
+    expect(todos.create({ title: 'x', priority: 'urgent' }).ok).toBe(false)
+    expect(todos.create({ title: 'x', dueAt: 'bad' }).ok).toBe(false)
+    expect(todos.update({ id: 999, title: 'x' }).ok).toBe(false)
+    const c = todos.create({ title: 'x' })
+    expect(todos.update({ id: c.todo.id, status: 'bad' }).ok).toBe(false)
+  })
+
+  it('due/reminded/snooze 闭环', () => {
+    const now = 1786300000000
+    const c = todos.create({ title: '到期任务', dueAt: now - 1000 })
+    expect(c.ok).toBe(true)
+    expect(todos.due(now).todos.length).toBe(1)
+    const marked = todos.markReminded({ id: c.todo.id, remindedAt: now })
+    expect(marked.todo.reminded_at).toBe(now)
+    expect(todos.due(now + 1000).todos.length).toBe(0)
+    todos.update({ id: c.todo.id, dueAt: now + 2000 })
+    expect(todos.due(now + 3000).todos.length).toBe(1)
+    todos.snooze({ id: c.todo.id, minutes: 10 })
+    expect(todos.due(Date.now()).todos.length).toBe(0)
   })
 })
 

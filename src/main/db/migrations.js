@@ -111,6 +111,15 @@ const MIGRATIONS = [
       ALTER TABLE pause_points ADD COLUMN tag_id INTEGER REFERENCES tags(id);
       CREATE INDEX IF NOT EXISTS idx_pause_tag ON pause_points(tag_id);
     `
+  },
+  {
+    version: 4,
+    name: 'todo-reminder-state',
+    sql: `
+      ALTER TABLE todos ADD COLUMN reminded_at INTEGER;
+      ALTER TABLE todos ADD COLUMN snooze_until INTEGER;
+      CREATE INDEX IF NOT EXISTS idx_todos_snooze ON todos(snooze_until);
+    `
   }
 ]
 

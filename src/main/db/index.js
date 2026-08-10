@@ -143,34 +143,36 @@ const pausePointsRepo = {
 
 // ---------- 待办仓储 ----------
 const todosRepo = {
-  create({ title, detail = null, priority = 'medium', dueAt = null, source = 'desktop' }) {
+  create({ title, detail = null, status = 'todo', priority = 'medium', dueAt = null, source = 'desktop' }) {
     const now = Date.now()
     const info = getDb()
-      .prepare('INSERT INTO todos (title, detail, priority, due_at, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(title, detail, priority, dueAt, source, now, now)
+      .prepare('INSERT INTO todos (title, detail, status, priority, due_at, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(title, detail, status, priority, dueAt, source, now, now)
     return this.get(info.lastInsertRowid)
   },
   get(id) {
     return getDb().prepare('SELECT * FROM todos WHERE id = ?').get(id)
   },
-  list({ status = null, includeDone = false, limit = 100 } = {}) {
+  list({ status = null, includeDone = false, limit = 100, dueOnly = false } = {}) {
     const clauses = []
     const vals = []
     if (status) { clauses.push('status = ?'); vals.push(status) }
     if (!includeDone && !status) clauses.push("status != 'done'")
+    if (dueOnly) { clauses.push('due_at IS NOT NULL AND due_at <= ?'); vals.push(Date.now()) }
     vals.push(limit)
     return getDb()
       .prepare(`SELECT * FROM todos ${clauses.length ? 'WHERE ' + clauses.join(' AND ') : ''} ORDER BY COALESCE(due_at, 9999999999999), updated_at DESC LIMIT ?`)
       .all(...vals)
   },
   update(id, patch) {
-    const map = { title: 'title', detail: 'detail', status: 'status', priority: 'priority', dueAt: 'due_at', source: 'source' }
+    const map = { title: 'title', detail: 'detail', status: 'status', priority: 'priority', dueAt: 'due_at', source: 'source', remindedAt: 'reminded_at', snoozeUntil: 'snooze_until' }
     const fields = []
     const vals = []
     for (const [k, col] of Object.entries(map)) {
       if (patch[k] !== undefined) { fields.push(`${col} = ?`); vals.push(patch[k]) }
     }
     if (patch.status === 'done') { fields.push('closed_at = ?'); vals.push(Date.now()) }
+    if (patch.status && patch.status !== 'done') { fields.push('closed_at = ?'); vals.push(null) }
     fields.push('updated_at = ?'); vals.push(Date.now())
     vals.push(id)
     getDb().prepare(`UPDATE todos SET ${fields.join(', ')} WHERE id = ?`).run(...vals)
@@ -182,8 +184,8 @@ const todosRepo = {
   },
   dueForReminder(now = Date.now()) {
     return getDb()
-      .prepare("SELECT * FROM todos WHERE status != 'done' AND due_at IS NOT NULL AND due_at <= ? ORDER BY due_at LIMIT 20")
-      .all(now)
+      .prepare("SELECT * FROM todos WHERE status != 'done' AND due_at IS NOT NULL AND due_at <= ? AND (snooze_until IS NULL OR snooze_until <= ?) AND (reminded_at IS NULL OR reminded_at < due_at) ORDER BY due_at LIMIT 20")
+      .all(now, now)
   }
 }
 

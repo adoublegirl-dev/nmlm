@@ -1,17 +1,26 @@
-// 待办提醒：桌面启动器消息推送。基础版：到期未完成待办弹系统通知，单次运行内不重复提醒。
-const { Notification } = require('electron')
+// 待办提醒：到期未完成待办弹系统通知，提醒状态持久化，避免重启后重复刷屏。
+const { Notification, shell } = require('electron')
 const todos = require('./todos')
+const settings = require('./settings')
 
 let timer = null
-const reminded = new Set()
+
+function openTodosPage() {
+  const port = settings.get('server.port') || 37129
+  shell.openExternal(`http://127.0.0.1:${port}/panel.html#todos`).catch(() => {})
+}
 
 function tick() {
   const r = todos.due(Date.now())
   if (!r.ok) return
   for (const t of r.todos) {
-    if (reminded.has(t.id)) continue
-    reminded.add(t.id)
-    new Notification({ title: '牛马联盟 · 待办提醒', body: t.title }).show()
+    const n = new Notification({
+      title: '牛马联盟 · 待办提醒',
+      body: t.due_at ? `${t.title}\n截止 ${new Date(t.due_at).toLocaleString()}` : t.title
+    })
+    n.on('click', openTodosPage)
+    n.show()
+    todos.markReminded({ id: t.id, remindedAt: Date.now() })
   }
 }
 
@@ -26,4 +35,4 @@ function stop() {
   timer = null
 }
 
-module.exports = { start, stop, tick }
+module.exports = { start, stop, tick, openTodosPage }
