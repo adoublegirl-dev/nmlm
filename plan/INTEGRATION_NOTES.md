@@ -5,12 +5,13 @@
 
 ## 一、当前状态（2026-08-05）
 
-**P0 完成并冒烟通过**：台账闭环 + 迷你栏 + 浏览器面板 + 快捷工具 + Express 服务。
+**P0+ 完成并冒烟通过**：台账闭环 + 桌面悬浮任务播放器 + 浏览器面板 + 快捷工具 + 待办 + MCP 桥 + Express 服务。
 
 已验证：
 - 15 个单元测试全绿（ledger 状态机 / report 聚合 / time 工具）
 - Electron 启动无报错，`http://127.0.0.1:37129` 面板/mini/tagpicker 页面均 200
-- API 通道正常：server:info、tools:list（6 个默认工具）、ledger:current
+- API 通道正常：server:info、tools:list（6 个默认工具）、ledger:current、todos:list
+- 新增：任务播放器 switchTask/complete/pausePoint，待办 CRUD，MCP server（src/mcp/server.mjs）
 
 待开发（P1）：截图水印文字、提醒引擎挂载、TagPicker 窗口实弹验证、快捷键录制热重载。
 
@@ -69,6 +70,7 @@ npm run dev                 # 构建后启动 electron
 ## 七、待办/待验证（P1 及以后）
 
 - [ ] 截图水印：P0 未加文字水印（nativeImage 不能直接绘图），P1 用 canvas/sharp 方案
+- [x] 待办提醒基础版：到期待办走系统 Notification（单次运行内不重复）
 - [ ] 提醒引擎挂载：reminder.js 逻辑已写好（evaluate 可单测），P1 在 index.js 启动定时器 + 弹窗
 - [ ] TagPicker 窗口实际弹出验证（键盘事件在无边框窗口的焦点行为）
 - [ ] 快捷键录制热重载（设置变更 → shortcut.unregisterAll + registerAll）
@@ -82,3 +84,4 @@ npm run dev                 # 构建后启动 electron
 - 2026-08-05：P0 完成。坑点 1-8 记录。设计文档 DESIGN.md v0.2。
 - 2026-08-05（补丁）：迷你栏提亮（高对比边框/实背景/投影，解决浅色壁纸下看不见）；实现拖拽（mousedown/mousemove 区分点击与拖动，IPC mini:setPos 带屏幕边界 clamp）；面板主题提亮一档（--bg-deep #1a1d23）。
 - 2026-08-05（补丁2）：修四件事：① 截图空图（thumbnailSize 传真实屏幕尺寸）；② 设置页补标签管理分区（增删改/数字键/颜色/摸鱼标记）；③ 台账记录点击可编辑（改标签 + 写备注 detail，走 ledger:retag）；④ 迷你栏拖拽漂移（去掉 mousemove 基准同步）；⑤ ABI 切换方案改为 prebuild-install，npm test/dev 自动切换。
+- 2026-08-10：按新思路改为“桌面悬浮任务播放器”：开始/切换任务会自动切段，完成任务结束当前段，暂停点写 pause_points；新增 todos 表、待办浏览器管理页、到期桌面通知、MCP server（nmlm_todo_add/list/update/close/current）。19 个单元测试全绿，Electron 冒烟通过。

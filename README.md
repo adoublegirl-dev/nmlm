@@ -2,7 +2,9 @@
 
 打工人时间台账与加班证据记录仪。常驻托盘 + 右下角迷你栏 + 浏览器面板。
 
-- 台账：快捷键记录被撕碎的时间，标签归类，天/周/月可视化
+- 台账：桌面悬浮“任务播放器”开始/切换/完成任务，标签归类，天/周/月可视化
+- 暂停点：任务进行中可随手打 marker，记录被打断/临时插队
+- 待办：浏览器管理 + 桌面提醒 + Agent MCP 工具写入/查询
 - 证据：快捷截图存证，生成加班证据链（P2）
 - 工具：内置常用站点入口，一键打开
 - 数据全本地（SQLite），MIT 开源
@@ -52,7 +54,33 @@ npm run dev         # 自动切到 Electron ABI 并启动应用
 | `npm test` | 单元测试（自动切 Node ABI） |
 | `npm run build:renderer` | 构建渲染层到 dist/ |
 | `npm run dist` | electron-builder 打包便携 exe（发布用） |
+| `npm run mcp` | 启动 MCP 待办工具服务（需桌面服务正在运行） |
 | `npm run rebuild` / `rebuild:node` | 手动切 ABI（一般不需要） |
+
+## Agent MCP 工具注册
+
+MCP 服务通过本地 HTTP 调用桌面启动器，因此**必须先运行 `npm run dev` 或打包后的桌面程序**。
+
+示例配置（路径按实际位置调整）：
+
+```json
+{
+  "mcpServers": {
+    "nmlm-todo": {
+      "command": "node",
+      "args": ["D:/Hanako的空间/牛马联盟/src/mcp/server.mjs"]
+    }
+  }
+}
+```
+
+提供工具：
+
+- `nmlm_todo_add`：新增待办
+- `nmlm_todo_list`：查看待办
+- `nmlm_todo_update`：更新待办
+- `nmlm_todo_close`：完成待办
+- `nmlm_task_current`：查看当前正在记录的任务片段
 
 ## 目录速览
 

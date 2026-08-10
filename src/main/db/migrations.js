@@ -73,6 +73,36 @@ const MIGRATIONS = [
              ('摸鱼', '#8F867B', 5, 5, 1, 0),
              ('其他', '#9D9D9D', 0, 6, 0, 0);
     `
+  },
+  {
+    version: 2,
+    name: 'task-player-and-todos',
+    sql: `
+      CREATE TABLE IF NOT EXISTS pause_points (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        entry_id       INTEGER REFERENCES time_entries(id),
+        ts             INTEGER NOT NULL,
+        detail         TEXT,
+        created_at     INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_pause_entry ON pause_points(entry_id);
+      CREATE INDEX IF NOT EXISTS idx_pause_ts ON pause_points(ts);
+
+      CREATE TABLE IF NOT EXISTS todos (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        title          TEXT    NOT NULL,
+        detail         TEXT,
+        status         TEXT    NOT NULL DEFAULT 'todo', -- todo | doing | done
+        priority       TEXT    NOT NULL DEFAULT 'medium',
+        due_at         INTEGER,
+        source         TEXT    NOT NULL DEFAULT 'desktop', -- desktop | agent | mcp
+        created_at     INTEGER NOT NULL,
+        updated_at     INTEGER NOT NULL,
+        closed_at      INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status);
+      CREATE INDEX IF NOT EXISTS idx_todos_due ON todos(due_at);
+    `
   }
 ]
 

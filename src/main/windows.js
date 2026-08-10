@@ -17,18 +17,18 @@ function loadRenderer(win, file) {
 function miniDefaultPos(width, height) {
   const { workArea } = screen.getPrimaryDisplay()
   return {
-    x: Math.round(workArea.x + workArea.width - width - 16),
-    y: Math.round(workArea.y + workArea.height - height - 16)
+    x: Math.round(workArea.x + workArea.width - width - 24),
+    y: Math.round(workArea.y + workArea.height - height - 72)
   }
 }
 
 function createMini() {
   const saved = settings.get('mini.position')
-  const defaultPos = miniDefaultPos(180, 34)
+  const defaultPos = miniDefaultPos(380, 260)
   const pos = saved && saved.x != null ? saved : defaultPos
   miniWin = new BrowserWindow({
-    width: 180,
-    height: 34,
+    width: 380,
+    height: 260,
     x: pos.x,
     y: pos.y,
     frame: false,
@@ -37,7 +37,7 @@ function createMini() {
     skipTaskbar: true,
     resizable: false,
     hasShadow: false,
-    focusable: false,
+    focusable: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -45,6 +45,15 @@ function createMini() {
     }
   })
   miniWin.setAlwaysOnTop(true, 'screen-saver')
+  let saveTimer = null
+  miniWin.on('move', () => {
+    clearTimeout(saveTimer)
+    saveTimer = setTimeout(() => {
+      if (!miniWin || miniWin.isDestroyed()) return
+      const [x, y] = miniWin.getPosition()
+      settings.set('mini.position', { x, y })
+    }, 250)
+  })
   loadRenderer(miniWin, 'mini.html')
   miniWin.on('closed', () => {
     miniWin = null
@@ -83,7 +92,16 @@ function setMiniPos(x, y) {
 function hideMiniToTray(flag) {
   settings.set('mini.hiddenToTray', flag)
   if (flag && miniWin) miniWin.hide()
-  else if (!flag && miniWin) miniWin.showInactive()
+  else if (!flag && miniWin) miniWin.show()
+}
+
+function showTaskPicker() {
+  if (!miniWin) createMini()
+  if (miniWin) {
+    miniWin.show()
+    miniWin.focus()
+    miniWin.webContents.send('mini:open-task-picker')
+  }
 }
 
 // ---------- TagPicker ----------
@@ -143,4 +161,4 @@ function createReminder(payload) {
   return reminderWin
 }
 
-module.exports = { createMini, getMini, resizeMini, setMiniPos, hideMiniToTray, createTagPicker, closeTagPicker, createReminder }
+module.exports = { createMini, getMini, resizeMini, setMiniPos, hideMiniToTray, showTaskPicker, createTagPicker, closeTagPicker, createReminder }

@@ -6,6 +6,10 @@ const IPC = {
   // ledger
   LEDGER_START: 'ledger:start',
   LEDGER_STOP: 'ledger:stop',
+  LEDGER_SWITCH_TASK: 'ledger:switchTask',
+  LEDGER_COMPLETE: 'ledger:complete',
+  LEDGER_ADD_PAUSE_POINT: 'ledger:addPausePoint',
+  LEDGER_PAUSE_POINTS: 'ledger:pausePoints',
   LEDGER_PAUSE: 'ledger:pause',
   LEDGER_CURRENT: 'ledger:current',
   LEDGER_LIST: 'ledger:list',
@@ -34,6 +38,13 @@ const IPC = {
   TOOLS_CREATE: 'tools:create',
   TOOLS_UPDATE: 'tools:update',
   TOOLS_DELETE: 'tools:delete',
+  // todos
+  TODOS_LIST: 'todos:list',
+  TODOS_CREATE: 'todos:create',
+  TODOS_UPDATE: 'todos:update',
+  TODOS_CLOSE: 'todos:close',
+  TODOS_DELETE: 'todos:delete',
+  TODOS_DUE: 'todos:due',
   // settings
   SETTINGS_GET_ALL: 'settings:getAll',
   SETTINGS_SET: 'settings:set',
@@ -60,7 +71,9 @@ const EVENTS = {
   PACK_DONE: 'pack:done',
   SETTINGS_CHANGED: 'settings:changed',
   SHORTCUT_CONFLICT: 'shortcut:conflict',
-  ACTIVITY_SNAPSHOT: 'activity:snapshot'
+  ACTIVITY_SNAPSHOT: 'activity:snapshot',
+  TODO_CHANGED: 'todo:changed',
+  MINI_OPEN_TASK_PICKER: 'mini:open-task-picker'
 }
 
 // ---------- 默认配置 ----------

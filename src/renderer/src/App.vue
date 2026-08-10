@@ -17,6 +17,7 @@
       <EvidenceView v-else-if="route === 'evidence'" />
       <ReportView v-else-if="route === 'report'" />
       <ToolsView v-else-if="route === 'tools'" />
+      <TodosView v-else-if="route === 'todos'" />
       <SettingsView v-else-if="route === 'settings'" />
     </main>
   </div>
@@ -30,6 +31,7 @@ import LedgerView from './views/LedgerView.vue'
 import EvidenceView from './views/EvidenceView.vue'
 import ReportView from './views/ReportView.vue'
 import ToolsView from './views/ToolsView.vue'
+import TodosView from './views/TodosView.vue'
 import SettingsView from './views/SettingsView.vue'
 
 const navs = [
@@ -37,6 +39,7 @@ const navs = [
   { key: 'evidence', label: '证据' },
   { key: 'report', label: '报表' },
   { key: 'tools', label: '工具' },
+  { key: 'todos', label: '待办' },
   { key: 'settings', label: '设置' }
 ]
 

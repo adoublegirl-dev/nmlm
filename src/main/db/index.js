@@ -63,10 +63,10 @@ const entriesRepo = {
   current() {
     return getDb().prepare('SELECT * FROM time_entries WHERE end_time IS NULL ORDER BY id DESC LIMIT 1').get()
   },
-  insert({ startTime }) {
+  insert({ startTime, tagId = null, detail = null, windowTitle = null }) {
     const info = getDb()
-      .prepare('INSERT INTO time_entries (start_time, created_at) VALUES (?, ?)')
-      .run(startTime, Date.now())
+      .prepare('INSERT INTO time_entries (start_time, tag_id, detail, window_title, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(startTime, tagId, detail, windowTitle, Date.now())
     return this.get(info.lastInsertRowid)
   },
   get(id) {
@@ -87,6 +87,77 @@ const entriesRepo = {
   },
   allUnfinished() {
     return getDb().prepare('SELECT * FROM time_entries WHERE end_time IS NULL ORDER BY start_time').all()
+  },
+  updateMeta(id, { tagId = null, detail = null }) {
+    getDb()
+      .prepare('UPDATE time_entries SET tag_id = ?, detail = ? WHERE id = ?')
+      .run(tagId, detail, id)
+    return this.get(id)
+  }
+}
+
+// ---------- 暂停点仓储 ----------
+const pausePointsRepo = {
+  insert({ entryId = null, ts = Date.now(), detail = null }) {
+    const info = getDb()
+      .prepare('INSERT INTO pause_points (entry_id, ts, detail, created_at) VALUES (?, ?, ?, ?)')
+      .run(entryId, ts, detail, Date.now())
+    return this.get(info.lastInsertRowid)
+  },
+  get(id) {
+    return getDb().prepare('SELECT * FROM pause_points WHERE id = ?').get(id)
+  },
+  listByEntry(entryId) {
+    return getDb().prepare('SELECT * FROM pause_points WHERE entry_id = ? ORDER BY ts').all(entryId)
+  },
+  listByRange(start, end) {
+    return getDb().prepare('SELECT * FROM pause_points WHERE ts >= ? AND ts < ? ORDER BY ts').all(start, end)
+  }
+}
+
+// ---------- 待办仓储 ----------
+const todosRepo = {
+  create({ title, detail = null, priority = 'medium', dueAt = null, source = 'desktop' }) {
+    const now = Date.now()
+    const info = getDb()
+      .prepare('INSERT INTO todos (title, detail, priority, due_at, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(title, detail, priority, dueAt, source, now, now)
+    return this.get(info.lastInsertRowid)
+  },
+  get(id) {
+    return getDb().prepare('SELECT * FROM todos WHERE id = ?').get(id)
+  },
+  list({ status = null, includeDone = false, limit = 100 } = {}) {
+    const clauses = []
+    const vals = []
+    if (status) { clauses.push('status = ?'); vals.push(status) }
+    if (!includeDone && !status) clauses.push("status != 'done'")
+    vals.push(limit)
+    return getDb()
+      .prepare(`SELECT * FROM todos ${clauses.length ? 'WHERE ' + clauses.join(' AND ') : ''} ORDER BY COALESCE(due_at, 9999999999999), updated_at DESC LIMIT ?`)
+      .all(...vals)
+  },
+  update(id, patch) {
+    const map = { title: 'title', detail: 'detail', status: 'status', priority: 'priority', dueAt: 'due_at', source: 'source' }
+    const fields = []
+    const vals = []
+    for (const [k, col] of Object.entries(map)) {
+      if (patch[k] !== undefined) { fields.push(`${col} = ?`); vals.push(patch[k]) }
+    }
+    if (patch.status === 'done') { fields.push('closed_at = ?'); vals.push(Date.now()) }
+    fields.push('updated_at = ?'); vals.push(Date.now())
+    vals.push(id)
+    getDb().prepare(`UPDATE todos SET ${fields.join(', ')} WHERE id = ?`).run(...vals)
+    return this.get(id)
+  },
+  remove(id) {
+    getDb().prepare('DELETE FROM todos WHERE id = ?').run(id)
+    return { ok: true }
+  },
+  dueForReminder(now = Date.now()) {
+    return getDb()
+      .prepare("SELECT * FROM todos WHERE status != 'done' AND due_at IS NOT NULL AND due_at <= ? ORDER BY due_at LIMIT 20")
+      .all(now)
   }
 }
 
@@ -168,4 +239,4 @@ const settingsRepo = {
   }
 }
 
-module.exports = { init, getDb, tagsRepo, entriesRepo, screenshotsRepo, packsRepo, activityRepo, settingsRepo }
+module.exports = { init, getDb, tagsRepo, entriesRepo, pausePointsRepo, todosRepo, screenshotsRepo, packsRepo, activityRepo, settingsRepo }

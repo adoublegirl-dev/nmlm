@@ -7,6 +7,7 @@ const ledger = require('./services/ledger')
 const evidence = require('./services/evidence')
 const report = require('./services/report')
 const tools = require('./services/tools')
+const todos = require('./services/todos')
 const activity = require('./services/activity')
 const windows = require('./windows')
 const { tagsRepo, packsRepo, settingsRepo } = require('./db')
@@ -41,6 +42,7 @@ function wireServiceEmitters() {
   evidence.attachEventSender((event, payload) => broadcast(event, payload))
   activity.attachEventSender((event, payload) => broadcast(event, payload))
   settings.attachEventSender((data) => broadcast(EVENTS.SETTINGS_CHANGED, data))
+  todos.attachEventSender((data) => broadcast(EVENTS.TODO_CHANGED, data))
 }
 
 // ---------- 通道实现 ----------
@@ -48,6 +50,10 @@ function registerAll() {
   // ledger
   registerHandler(IPC.LEDGER_START, () => ledger.start())
   registerHandler(IPC.LEDGER_STOP, (a) => ledger.stop(a))
+  registerHandler(IPC.LEDGER_SWITCH_TASK, (a) => ledger.switchTask(a))
+  registerHandler(IPC.LEDGER_COMPLETE, (a) => ledger.complete(a))
+  registerHandler(IPC.LEDGER_ADD_PAUSE_POINT, (a) => ledger.addPausePoint(a))
+  registerHandler(IPC.LEDGER_PAUSE_POINTS, (a) => ({ ok: true, points: ledger.listPausePointsByRange(a.start, a.end) }))
   registerHandler(IPC.LEDGER_PAUSE, () => ledger.pause())
   registerHandler(IPC.LEDGER_CURRENT, () => ({ ok: true, entry: ledger.current() }))
   registerHandler(IPC.LEDGER_LIST, (a) => ({ ok: true, entries: ledger.listByRange(a.start, a.end) }))
@@ -81,6 +87,14 @@ function registerAll() {
   registerHandler(IPC.TOOLS_CREATE, (a) => tools.create(a))
   registerHandler(IPC.TOOLS_UPDATE, (a) => tools.update(a.id, a))
   registerHandler(IPC.TOOLS_DELETE, (a) => tools.remove(a.id))
+
+  // todos
+  registerHandler(IPC.TODOS_LIST, (a) => todos.list(a))
+  registerHandler(IPC.TODOS_CREATE, (a) => todos.create(a))
+  registerHandler(IPC.TODOS_UPDATE, (a) => todos.update(a))
+  registerHandler(IPC.TODOS_CLOSE, (a) => todos.close(a))
+  registerHandler(IPC.TODOS_DELETE, (a) => todos.remove(a))
+  registerHandler(IPC.TODOS_DUE, (a) => todos.due(a && a.now))
 
   // settings
   registerHandler(IPC.SETTINGS_GET_ALL, () => ({ ok: true, settings: settings.getAll() }))

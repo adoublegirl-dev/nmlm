@@ -28,6 +28,7 @@ if (!gotLock) {
     const windows = require('./windows')
     const shortcut = require('./services/shortcut')
     const activity = require('./services/activity')
+    const todoReminder = require('./services/todoReminder')
     const ipc = require('./ipc')
 
     // 1. 数据库
@@ -58,7 +59,7 @@ if (!gotLock) {
 
     // 7. 快捷键
     const failed = shortcut.registerAll({
-      start: () => ledger.start(),
+      start: () => windows.showTaskPicker(),
       stop: () => onStopShortcut(),
       screenshot: () => evidenceCapture(),
       pack: () => actions.pack(),
@@ -68,8 +69,9 @@ if (!gotLock) {
       for (const f of failed) console.warn(`[niuma] 快捷键冲突: ${f.accelerator}`)
     }
 
-    // 8. 活动采集（P0 起轮询，供迷你栏显示当前窗口）
+    // 8. 活动采集 + 待办提醒
     activity.start()
+    todoReminder.start()
 
     // 9. 迷你栏状态同步
     syncMiniState(ledger.current())
@@ -102,8 +104,7 @@ function buildActions() {
     toggleRecord: () => {
       const current = ledger.current()
       if (current) return onStopShortcut()
-      ledger.start()
-      tray.setState('recording')
+      windows.showTaskPicker()
     },
     screenshot: () => evidence.capture(),
     pack: () => {
@@ -117,15 +118,11 @@ function buildActions() {
   }
 }
 
-function onStopShortcut() {
+async function onStopShortcut() {
   const ledger = require('./services/ledger')
   const tray = require('./tray')
-  const windows = require('./windows')
-  const r = ledger.stop({})
-  if (r.ok) {
-    tray.setState('idle')
-    windows.createTagPicker(r.entry.id)
-  }
+  const r = await ledger.complete({})
+  if (r.ok) tray.setState('idle')
   return r
 }
 
@@ -151,8 +148,10 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   const activity = require('./services/activity')
+  const todoReminder = require('./services/todoReminder')
   const shortcut = require('./services/shortcut')
   activity.stop()
+  todoReminder.stop()
   shortcut.unregisterAll()
   if (server) server.close()
 })

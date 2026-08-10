@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url)
 const db = require('../src/main/db')
 const ledger = require('../src/main/services/ledger')
 const report = require('../src/main/services/report')
+const todos = require('../src/main/services/todos')
 const { startOfDay, endOfDay, formatDuration, dayRange } = require('../src/main/utils/time')
 
 const { entriesRepo } = db
@@ -83,6 +84,45 @@ describe('ledger 状态机', () => {
     const ret = await ledger.retag(r.entry.id, { tagId: 3 })
     expect(ret.ok).toBe(true)
     expect(ret.entry.tag_id).toBe(3)
+  })
+  it('switchTask 自动结束上一段并开启新任务', async () => {
+    const first = await ledger.switchTask({ tagId: 1, detail: '写代码' })
+    expect(first.ok).toBe(true)
+    const second = await ledger.switchTask({ tagId: 2, detail: '开会' })
+    expect(second.ok).toBe(true)
+    expect(second.finished.id).toBe(first.entry.id)
+    expect(second.finished.end_time).not.toBeNull()
+    expect(ledger.current().tag_id).toBe(2)
+  })
+
+  it('complete 结束当前任务但不开启新任务', async () => {
+    await ledger.switchTask({ tagId: 1 })
+    const r = await ledger.complete({})
+    expect(r.ok).toBe(true)
+    expect(ledger.current()).toBeNull()
+  })
+
+  it('addPausePoint 给当前任务添加暂停点', async () => {
+    const r = await ledger.switchTask({ tagId: 1 })
+    const p = ledger.addPausePoint({ detail: '被打断' })
+    expect(p.ok).toBe(true)
+    const points = ledger.listPausePointsByRange(r.entry.start_time - 1, Date.now() + 1000)
+    expect(points.length).toBe(1)
+    expect(points[0].detail).toBe('被打断')
+  })
+})
+
+describe('todos 服务', () => {
+  it('create/list/update/close', () => {
+    const c = todos.create({ title: '写方案', detail: '牛马联盟 P1', priority: 'high', source: 'agent' })
+    expect(c.ok).toBe(true)
+    expect(todos.list({}).todos.length).toBe(1)
+    const u = todos.update({ id: c.todo.id, status: 'doing' })
+    expect(u.todo.status).toBe('doing')
+    const closed = todos.close({ id: c.todo.id })
+    expect(closed.todo.status).toBe('done')
+    expect(todos.list({}).todos.length).toBe(0)
+    expect(todos.list({ includeDone: true }).todos.length).toBe(1)
   })
 })
 

@@ -16,9 +16,11 @@
     "test:watch": "npm run rebuild:node && vitest",
     "rebuild": "cd node_modules/better-sqlite3 && prebuild-install -r electron -t 31.7.7",
     "rebuild:node": "cd node_modules/better-sqlite3 && prebuild-install",
+    "mcp": "node src/mcp/server.mjs",
     "dist": "npm run build:renderer && electron-builder"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "better-sqlite3": "^12.11.1",
     "express": "^4.19.2"
   },
