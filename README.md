@@ -53,27 +53,88 @@ npm run dev         # 自动切到 Electron ABI 并启动应用
 | 命令 | 说明 |
 |------|------|
 | `npm run dev` | 启动应用（自动切 Electron ABI） |
+| `npm run dev:utf8` | UTF-8 安全启动应用，Windows 中文日志不乱码 |
 | `npm test` | 单元测试（自动切 Node ABI） |
 | `npm run build:renderer` | 构建渲染层到 dist/ |
 | `npm run dist` | electron-builder 打包便携 exe（发布用） |
 | `npm run mcp` | 启动 MCP 待办工具服务（需桌面服务正在运行） |
+| `npm run mcp:utf8` | UTF-8 安全启动 MCP 服务 |
+| `npm run junction` | 创建 `C:\nmlm` 无中文路径入口 |
 | `npm run rebuild` / `rebuild:node` | 手动切 ABI（一般不需要） |
 
 ## Agent MCP 工具注册
 
-MCP 服务通过本地 HTTP 调用桌面启动器，因此**必须先运行 `npm run dev` 或打包后的桌面程序**。
+MCP 服务通过本地 HTTP 调用桌面启动器，因此**必须先运行桌面程序**：
 
-示例配置（路径按实际位置调整）：
+```powershell
+cd "D:\Hanako的空间\牛马联盟"
+npm run dev:utf8
+```
+
+默认 API：`http://127.0.0.1:37129/api/call`。
+
+### 推荐：先创建无中文路径入口
+
+部分 MCP 客户端/旧 PowerShell 对中文路径兼容一般。推荐执行一次：
+
+```powershell
+cd "D:\Hanako的空间\牛马联盟"
+npm run junction
+```
+
+成功后会得到：
+
+```txt
+C:\nmlm -> D:\Hanako的空间\牛马联盟
+```
+
+### MCP 客户端配置
+
+推荐配置为：
+
+```json
+{
+  "mcpServers": {
+    "nmlm-todo": {
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy", "Bypass",
+        "-NoProfile",
+        "-File", "C:\\nmlm\\scripts\\mcp.ps1"
+      ],
+      "env": {
+        "NMLM_API": "http://127.0.0.1:37129/api/call"
+      }
+    }
+  }
+}
+```
+
+如果不创建 junction，也可以直接用中文路径：
 
 ```json
 {
   "mcpServers": {
     "nmlm-todo": {
       "command": "node",
-      "args": ["D:/Hanako的空间/牛马联盟/src/mcp/server.mjs"]
+      "args": ["D:\\Hanako的空间\\牛马联盟\\src\\mcp\\server.mjs"],
+      "env": {
+        "NMLM_API": "http://127.0.0.1:37129/api/call"
+      }
     }
   }
 }
+```
+
+### PowerShell 中文乱码
+
+Windows PowerShell 5.1 可能把 UTF-8 输出按旧编码显示，出现 `蹇嵎...` 这类乱码。功能通常不受影响；建议用 `scripts/dev.ps1` / `scripts/mcp.ps1` 启动，它们会自动设置：
+
+```powershell
+chcp 65001
+$OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::InputEncoding = [System.Text.Encoding]::UTF8
 ```
 
 提供工具：

@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "electron .",
     "predev": "npm run rebuild",
+    "dev:utf8": "powershell -ExecutionPolicy Bypass -NoProfile -File ./scripts/dev.ps1",
     "dev:renderer": "vite",
     "build:renderer": "vite build",
     "start": "npm run build:renderer && electron .",
@@ -17,6 +18,8 @@
     "rebuild": "cd node_modules/better-sqlite3 && prebuild-install -r electron -t 31.7.7",
     "rebuild:node": "cd node_modules/better-sqlite3 && prebuild-install",
     "mcp": "node src/mcp/server.mjs",
+    "mcp:utf8": "powershell -ExecutionPolicy Bypass -NoProfile -File ./scripts/mcp.ps1",
+    "junction": "powershell -ExecutionPolicy Bypass -NoProfile -File ./scripts/create-junction.ps1",
     "dist": "npm run build:renderer && electron-builder"
   },
   "dependencies": {
