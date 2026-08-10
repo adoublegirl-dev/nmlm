@@ -8,8 +8,7 @@ let tagPickerWin = null
 let reminderWin = null
 
 const RECORDER_WIDTH = 380
-const RECORDER_HEIGHT = 86
-const RECORDER_MENU_HEIGHT = 260
+const RECORDER_HEIGHT = 260
 const DIST_URL = () => `http://127.0.0.1:${require('./services/settings').get('server.port')}`
 
 function loadRenderer(win, file) {
@@ -34,7 +33,7 @@ function createRecorder() {
     minWidth: RECORDER_WIDTH,
     maxWidth: RECORDER_WIDTH,
     minHeight: RECORDER_HEIGHT,
-    maxHeight: RECORDER_MENU_HEIGHT,
+    maxHeight: RECORDER_HEIGHT,
     x: pos.x,
     y: pos.y,
     frame: false,
@@ -100,12 +99,7 @@ function isRecorderVisible() {
 function isMiniVisible() { return isRecorderVisible() }
 
 function setRecorderMenuOpen(open) {
-  if (!recorderWin || recorderWin.isDestroyed()) return { ok: false, error: '记录器未创建' }
-  const b = recorderWin.getBounds()
-  const targetHeight = open ? RECORDER_MENU_HEIGHT : RECORDER_HEIGHT
-  const bottom = b.y + b.height
-  recorderWin.setBounds({ x: b.x, y: bottom - targetHeight, width: RECORDER_WIDTH, height: targetHeight })
-  return { ok: true, open, height: targetHeight }
+  return { ok: true, open }
 }
 
 function setRecorderPos(x, y) {

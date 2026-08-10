@@ -3,20 +3,22 @@ import './recorder.css'
 
 const app = document.getElementById('recorder-app')
 app.innerHTML = `
-  <div class="recorder">
-    <div class="titlebar">
-      <div class="title">记录器</div>
-      <button id="hide" class="close-btn no-drag" title="隐藏到托盘">×</button>
-    </div>
-
-    <div class="main-row no-drag">
-      <div id="timer" class="timer num">00:00:00</div>
-      <div id="tagDropdown" class="tag-dropdown">
-        <button id="tagButton" class="tag-button" title="选择标签">标签</button>
-        <div id="tagMenu" class="tag-menu hidden"></div>
+  <div class="recorder-shell">
+    <div id="tagMenu" class="tag-menu hidden no-drag"></div>
+    <div class="recorder">
+      <div class="titlebar">
+        <div class="title">记录器</div>
+        <button id="hide" class="close-btn no-drag" title="隐藏到托盘">×</button>
       </div>
-      <button id="toggleBtn" class="icon-action primary" title="开始">▶</button>
-      <button id="stopBtn" class="icon-action danger" title="停止">■</button>
+
+      <div class="main-row no-drag">
+        <div id="timer" class="timer num">00:00:00</div>
+        <button id="toggleBtn" class="icon-action primary" title="开始">▶</button>
+        <button id="stopBtn" class="icon-action danger" title="停止">■</button>
+        <div id="tagDropdown" class="tag-dropdown">
+          <button id="tagButton" class="tag-button" title="选择标签">标签</button>
+        </div>
+      </div>
     </div>
   </div>
 `
@@ -88,7 +90,6 @@ function setMenu(open) {
   menuOpen = open
   document.getElementById('tagMenu').classList.toggle('hidden', !open)
   document.getElementById('tagDropdown').classList.toggle('open', open)
-  api('recorder:setMenuOpen', { open }).catch(() => {})
 }
 
 async function refresh() {
