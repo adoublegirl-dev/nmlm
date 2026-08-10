@@ -62,11 +62,12 @@
         <div v-if="editEntry.pausePoints?.length" class="pause-editor">
           <h4>暂停点切分</h4>
           <div class="muted split-hint">暂停点标签表示“从该暂停点开始到下一个暂停点/结束”的标签。不同标签会拆分记录，连续同标签会自动合并。</div>
-          <div v-for="p in editEntry.pausePoints" :key="p.id" class="pause-edit-row">
+          <div v-for="p in editForm.pausePoints" :key="p.id" class="pause-edit-row">
             <span class="num">{{ p.timeText }}</span>
-            <select class="input pause-select" :value="p.tag_id ?? editEntry.tag_id" @change="applyPauseTag(p, Number($event.target.value))">
+            <select class="input pause-select" v-model.number="p.tagId">
               <option v-for="t in tags" :key="t.id" :value="t.id">{{ t.name }}</option>
             </select>
+            <input class="input pause-detail" v-model="p.detail" placeholder="暂停点文字记录" />
           </div>
         </div>
         <div class="edit-ops">
@@ -92,7 +93,7 @@ const effectiveSec = ref(0)
 const fragments = ref(0)
 const tags = ref([])
 const editEntry = ref(null)
-const editForm = ref({ tagId: null, detail: '' })
+const editForm = ref({ tagId: null, detail: '', pausePoints: [] })
 
 const isToday = computed(() => new Date(curDate.value).toDateString() === new Date().toDateString())
 const isYesterday = computed(() => new Date(curDate.value).toDateString() === new Date(startOfDay(Date.now()) - DAY_MS).toDateString())
@@ -192,7 +193,16 @@ async function doPause() {
 
 function openEdit(s) {
   editEntry.value = s
-  editForm.value = { tagId: s.tag_id, detail: s.detail || '' }
+  editForm.value = {
+    tagId: s.tag_id,
+    detail: s.detail || '',
+    pausePoints: (s.pausePoints || []).map((p) => ({
+      id: p.id,
+      timeText: p.timeText,
+      tagId: p.tag_id == null ? s.tag_id : p.tag_id,
+      detail: p.detail || ''
+    }))
+  }
 }
 function closeEdit() {
   editEntry.value = null
@@ -204,26 +214,19 @@ async function saveEdit() {
     tagId: editForm.value.tagId,
     detail: editForm.value.detail.trim() || null
   })
-  editEntry.value = null
-  load()
-}
-
-async function applyPauseTag(point, tagId) {
-  if (!editEntry.value) return
-  const baseTag = editEntry.value.tag_id
-  if (tagId !== baseTag) {
-    const ok = confirm('您选择的标签与当前记录的标签不同。确认后，当前记录将按暂停点拆分成多条，并自动合并连续相同标签。')
-    if (!ok) {
-      load()
-      return
+  if (editForm.value.pausePoints.length) {
+    const baseTag = editEntry.value.tag_id
+    const willSplit = editForm.value.pausePoints.some((p) => Number(p.tagId) !== Number(baseTag))
+    if (willSplit) {
+      const ok = confirm('暂停点中存在与当前记录不同的标签。确认后，当前记录将按暂停点拆分成多条，并自动合并连续相同标签。')
+      if (!ok) return
     }
+    const r = await api('ledger:applyPausePointPlan', {
+      entryId: editEntry.value.id,
+      points: editForm.value.pausePoints.map((p) => ({ id: p.id, tagId: p.tagId, detail: p.detail?.trim() || null }))
+    })
+    if (r.split) alert('已按暂停点拆分并刷新台账')
   }
-  const r = await api('ledger:applyPausePointTag', {
-    entryId: editEntry.value.id,
-    pointId: point.id,
-    tagId
-  })
-  alert(r.split ? '已按暂停点拆分并刷新台账' : '已合并为一条记录')
   editEntry.value = null
   load()
 }
@@ -287,6 +290,7 @@ onBeforeUnmount(() => {
 .split-hint { font-size: 12px; line-height: 1.5; }
 .pause-edit-row { display: flex; align-items: center; gap: 8px; }
 .pause-edit-row .num { width: 62px; color: var(--text-dim); }
-.pause-select { flex: 1; }
+.pause-select { width: 130px; }
+.pause-detail { flex: 1; min-width: 160px; }
 .edit-ops { display: flex; justify-content: flex-end; gap: 8px; }
 </style>

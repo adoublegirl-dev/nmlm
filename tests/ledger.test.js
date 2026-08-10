@@ -132,7 +132,7 @@ describe('ledger 状态机', () => {
     expect(rows.map((x) => x.duration_sec)).toEqual([600, 600, 600])
   })
 
-  it('暂停点选择同标签后合并为一条记录', () => {
+  it('暂停点选择同标签时只保存文字记录，不拆分不消费暂停点', () => {
     const base = 1786300000000
     const entry = entriesRepo.insertFinished({
       startTime: base,
@@ -144,13 +144,15 @@ describe('ledger 状态机', () => {
       isFragment: 0
     })
     const p1 = pausePointsRepo.insert({ entryId: entry.id, ts: base + 10 * 60 * 1000 })
-    const r = ledger.applyPausePointTag({ entryId: entry.id, pointId: p1.id, tagId: 1 })
+    const r = ledger.applyPausePointPlan({ entryId: entry.id, points: [{ id: p1.id, tagId: 1, detail: '接了个电话' }] })
     expect(r.ok).toBe(true)
     expect(r.split).toBe(false)
     const rows = entriesRepo.listByRange(base - 1, base + 31 * 60 * 1000)
     expect(rows.length).toBe(1)
     expect(rows[0].duration_sec).toBe(1800)
-    expect(pausePointsRepo.listByEntry(entry.id).length).toBe(0)
+    const points = pausePointsRepo.listByEntry(entry.id)
+    expect(points.length).toBe(1)
+    expect(points[0].detail).toBe('接了个电话')
   })
 })
 

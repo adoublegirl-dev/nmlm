@@ -123,6 +123,10 @@ const pausePointsRepo = {
   listByRange(start, end) {
     return getDb().prepare('SELECT * FROM pause_points WHERE ts >= ? AND ts < ? ORDER BY ts').all(start, end)
   },
+  update(id, { tagId = null, detail = null } = {}) {
+    getDb().prepare('UPDATE pause_points SET tag_id = ?, detail = ? WHERE id = ?').run(tagId, detail, id)
+    return this.get(id)
+  },
   updateTag(id, tagId = null) {
     getDb().prepare('UPDATE pause_points SET tag_id = ? WHERE id = ?').run(tagId, id)
     return this.get(id)

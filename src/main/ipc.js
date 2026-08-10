@@ -54,6 +54,7 @@ function registerAll() {
   registerHandler(IPC.LEDGER_COMPLETE, (a) => ledger.complete(a))
   registerHandler(IPC.LEDGER_ADD_PAUSE_POINT, (a) => ledger.addPausePoint(a))
   registerHandler(IPC.LEDGER_APPLY_PAUSE_POINT_TAG, (a) => ledger.applyPausePointTag(a))
+  registerHandler(IPC.LEDGER_APPLY_PAUSE_POINT_PLAN, (a) => ledger.applyPausePointPlan(a))
   registerHandler(IPC.LEDGER_PAUSE_POINTS, (a) => ({ ok: true, points: ledger.listPausePointsByRange(a.start, a.end) }))
   registerHandler(IPC.LEDGER_PAUSE, () => ledger.pause())
   registerHandler(IPC.LEDGER_CURRENT, () => ({ ok: true, entry: ledger.current() }))
