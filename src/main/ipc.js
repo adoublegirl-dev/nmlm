@@ -134,11 +134,6 @@ function registerAll() {
     windows.setMiniPos(a.x, a.y)
     return { ok: true }
   })
-  registerHandler(IPC.MINI_RESIZE, (a) => {
-    windows.resizeMini(a.width, a.height)
-    return { ok: true }
-  })
-
   // tagpicker
   registerHandler(IPC.TAGPICKER_CANCEL, () => {
     windows.closeTagPicker()

@@ -57,7 +57,6 @@ const IPC = {
   // mini dock
   MINI_HIDE: 'mini:hide',
   MINI_SET_POS: 'mini:setPos',
-  MINI_RESIZE: 'mini:resize',
   // tagpicker
   TAGPICKER_CANCEL: 'tagpicker:cancel',
   TAGPICKER_CONFIRM: 'tagpicker:confirm'
@@ -72,8 +71,7 @@ const EVENTS = {
   SETTINGS_CHANGED: 'settings:changed',
   SHORTCUT_CONFLICT: 'shortcut:conflict',
   ACTIVITY_SNAPSHOT: 'activity:snapshot',
-  TODO_CHANGED: 'todo:changed',
-  MINI_OPEN_TASK_PICKER: 'mini:open-task-picker'
+  TODO_CHANGED: 'todo:changed'
 }
 
 // ---------- 默认配置 ----------

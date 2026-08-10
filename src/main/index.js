@@ -13,11 +13,7 @@ if (!gotLock) {
 } else {
   app.on('second-instance', () => {
     const windows = require('./windows')
-    const mini = windows.getMini()
-    if (mini) {
-      mini.showInactive()
-      windows.resizeMini(360, 320)
-    }
+    windows.showRecorder()
   })
 
   app.whenReady().then(async () => {
@@ -170,7 +166,12 @@ async function onStartShortcut() {
     new Notification({ title: '牛马联盟', body: '没有可用标签，请先在设置里创建标签' }).show()
     return { ok: false, error: '没有可用标签' }
   }
-  const r = await ledger.switchTask({ tagId: tag.id })
+  if (ledger.current()) {
+    if (settings.get('mini.enabled')) windows.showRecorder()
+    return { ok: true, entry: ledger.current(), alreadyRecording: true }
+  }
+  const r = await ledger.start({ tagId: tag.id })
+  console.log(`[niuma] start result: ok=${r.ok}${r.entry ? ` id=${r.entry.id}` : ''}${r.error ? ` error=${r.error}` : ''}`)
   if (r.ok) {
     tray.setState('recording')
     if (settings.get('mini.enabled')) windows.showRecorder()
@@ -182,6 +183,7 @@ async function onStopShortcut() {
   const ledger = require('./services/ledger')
   const tray = require('./tray')
   const r = await ledger.complete({})
+  console.log(`[niuma] stop result: ok=${r.ok}${r.entry ? ` id=${r.entry.id}` : ''}${r.error ? ` error=${r.error}` : ''}`)
   if (r.ok) tray.setState('idle')
   return r
 }

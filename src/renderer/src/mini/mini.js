@@ -101,7 +101,7 @@ async function startRecord() {
   const tagId = Number(document.getElementById('tagSelect').value || selectedTagId || 0) || null
   if (!tagId) return alert('请先配置或选择标签')
   await saveSelectedTag(tagId)
-  const r = await api('ledger:switchTask', { tagId })
+  const r = await api('ledger:start', { tagId })
   if (!r.ok) return alert(r.error || '开始失败')
   paused = false
   await refresh()
@@ -130,7 +130,6 @@ document.getElementById('stopBtn').addEventListener('click', stopRecord)
 document.getElementById('hide').addEventListener('click', () => api('mini:hide'))
 
 on('ledger:state-changed', refresh)
-on('mini:open-task-picker', () => startRecord())
 
 Promise.resolve()
   .then(loadSettings)

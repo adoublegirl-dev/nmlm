@@ -6,8 +6,6 @@ const settings = require('./services/settings')
 let miniWin = null
 let tagPickerWin = null
 let reminderWin = null
-let miniReady = false
-let pendingTaskPicker = false
 
 const DIST_URL = () => `http://127.0.0.1:${require('./services/settings').get('server.port')}`
 
@@ -56,35 +54,15 @@ function createMini() {
       settings.set('mini.position', { x, y })
     }, 250)
   })
-  miniReady = false
   loadRenderer(miniWin, 'mini.html')
-  miniWin.webContents.once('did-finish-load', () => {
-    miniReady = true
-    if (pendingTaskPicker) {
-      pendingTaskPicker = false
-      sendTaskPickerOpen()
-    }
-  })
   miniWin.on('closed', () => {
     miniWin = null
-    miniReady = false
   })
   return miniWin
 }
 
 function getMini() {
   return miniWin
-}
-
-function resizeMini(width, height) {
-  if (!miniWin) return
-  const [curX, curY] = miniWin.getPosition()
-  // 展开向上，保持底部对齐
-  miniWin.setBounds({ x: curX, y: curY - (height - miniWin.getBounds().height), width, height })
-  // 贴边时保证不出屏幕
-  const { workArea } = screen.getPrimaryDisplay()
-  const b = miniWin.getBounds()
-  if (b.y < workArea.y) miniWin.setPosition(b.x, workArea.y)
 }
 
 function setMiniPos(x, y) {
@@ -116,22 +94,6 @@ function showRecorder() {
 
 function isMiniVisible() {
   return !!(miniWin && !miniWin.isDestroyed() && miniWin.isVisible())
-}
-
-function sendTaskPickerOpen() {
-  if (!miniWin || miniWin.isDestroyed()) return
-  miniWin.webContents.send('mini:open-task-picker')
-}
-
-function showTaskPicker() {
-  console.log('[niuma] 快捷键触发：开始记录')
-  showRecorder()
-  if (!miniWin) return
-  if (!miniReady) {
-    pendingTaskPicker = true
-    return
-  }
-  sendTaskPickerOpen()
 }
 
 // ---------- TagPicker ----------
@@ -191,4 +153,4 @@ function createReminder(payload) {
   return reminderWin
 }
 
-module.exports = { createMini, getMini, resizeMini, setMiniPos, hideMiniToTray, showRecorder, isMiniVisible, showTaskPicker, createTagPicker, closeTagPicker, createReminder }
+module.exports = { createMini, getMini, setMiniPos, hideMiniToTray, showRecorder, isMiniVisible, createTagPicker, closeTagPicker, createReminder }
