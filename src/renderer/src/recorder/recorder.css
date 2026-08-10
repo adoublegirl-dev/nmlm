@@ -21,7 +21,7 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
   flex-direction: column;
   gap: 7px;
   font-size: 12px;
-  transition: height .28s ease, border-radius .28s ease, padding .28s ease, background .28s ease, box-shadow .28s ease, border-color .28s ease;
+  transition: left .28s ease, right .28s ease, bottom .28s ease, height .28s ease, border-radius .28s ease, padding .28s ease, background .28s ease, box-shadow .28s ease, border-color .28s ease;
 }
 .titlebar {
   -webkit-app-region: drag;
@@ -135,6 +135,9 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
 
 .collapsed .recorder {
   -webkit-app-region: no-drag;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
   height: 54px;
   padding: 8px 14px;
   border-radius: 999px;

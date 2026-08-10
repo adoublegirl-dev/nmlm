@@ -179,7 +179,6 @@ async function onStartShortcut() {
     console.log(`[niuma] pause result: ok=${r.ok}${r.entry ? ` id=${r.entry.id}` : ''}${r.error ? ` error=${r.error}` : ''}`)
     if (r.ok) {
       tray.setState('idle')
-      if (settings.get('recorder.enabled') || settings.get('mini.enabled')) windows.showRecorder()
     }
     return r
   }
@@ -187,7 +186,6 @@ async function onStartShortcut() {
   console.log(`[niuma] start result: ok=${r.ok}${r.entry ? ` id=${r.entry.id}` : ''}${r.error ? ` error=${r.error}` : ''}`)
   if (r.ok) {
     tray.setState('recording')
-    if (settings.get('recorder.enabled') || settings.get('mini.enabled')) windows.showRecorder()
   }
   return r
 }
