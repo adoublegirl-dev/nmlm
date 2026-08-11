@@ -180,47 +180,39 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
   position: absolute;
   left: 10px;
   right: 10px;
-  bottom: 9px;
+  bottom: 8px;
   z-index: 5;
   height: 24px;
   line-height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
+  padding: 0 4px;
   opacity: 0;
   pointer-events: none;
-  transform: translateY(4px) scale(.98);
-  transition: opacity .18s ease, transform .2s ease, background .2s ease, color .2s ease, border-color .2s ease;
-  border: 1px solid rgba(224,188,114,.28);
-  background: rgba(22,24,29,.88);
-  color: #f2efe9;
-  box-shadow: 0 8px 22px rgba(0,0,0,.30);
+  transform: translateY(5px);
+  transition: opacity .75s ease, transform .9s ease, letter-spacing .9s ease, filter .9s ease;
+  border: none;
+  background: transparent;
+  color: rgba(242,239,233,.56);
+  box-shadow: none;
   text-align: center;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
+  letter-spacing: .08em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  filter: blur(.2px);
 }
 .has-message .message-badge {
-  opacity: 1;
-  transform: translateY(0) scale(1);
+  opacity: .86;
+  transform: translateY(0);
+  letter-spacing: .13em;
+  filter: blur(0);
+  animation: messageBreath 2s ease-in-out both;
 }
-.has-message[data-message-type="success"] .message-badge {
-  color: #f3cc7b;
-  border-color: rgba(240,198,116,.48);
-  background: rgba(48,39,20,.92);
-}
-.has-message[data-message-type="info"] .message-badge {
-  color: #9fcfb0;
-  border-color: rgba(143,190,160,.42);
-  background: rgba(22,42,31,.92);
-}
+.has-message[data-message-type="success"] .message-badge { color: rgba(243,204,123,.78); }
+.has-message[data-message-type="info"] .message-badge { color: rgba(159,207,176,.72); }
 .has-message[data-message-type="warning"] .message-badge,
-.has-message[data-message-type="error"] .message-badge {
-  color: #f1a28f;
-  border-color: rgba(241,162,143,.45);
-  background: rgba(55,26,23,.92);
-}
+.has-message[data-message-type="error"] .message-badge { color: rgba(241,162,143,.76); }
 .motion-track {
   display: none;
   position: absolute;
@@ -348,11 +340,11 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
   bottom: auto;
   height: 30px;
   line-height: 30px;
-  transform: translateY(-50%) scale(.98);
+  transform: translateY(calc(-50% + 5px));
   font-size: 13px;
 }
 .collapsed.has-message .message-badge {
-  transform: translateY(-50%) scale(1);
+  transform: translateY(-50%);
 }
 .collapsed.has-message .motion-track {
   opacity: 0;
@@ -368,7 +360,7 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
   opacity: .92;
   transform: none;
 }
-.collapsed.has-message .recorder::before { opacity: .9; animation: none; }
+.collapsed.has-message .recorder::before { opacity: .32; animation: capsuleBgFlow 5s linear infinite; }
 .collapsed.is-idle .recorder::before { opacity: 0; }
 .collapsed.is-idle.has-message .recorder::before { opacity: .72; }
 .collapsed.is-idle .motion-track::before { background: rgba(255,255,255,.10); }
@@ -427,6 +419,19 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
   left: 50%;
   height: 8px;
   top: 50%;
+}
+@keyframes messageBreath {
+  0% { opacity: 0; transform: translateY(6px); filter: blur(1px); }
+  24% { opacity: .86; transform: translateY(0); filter: blur(0); }
+  72% { opacity: .72; transform: translateY(0); filter: blur(0); }
+  100% { opacity: 0; transform: translateY(-4px); filter: blur(1px); }
+}
+.collapsed.has-message .message-badge { animation-name: messageBreathCollapsed; }
+@keyframes messageBreathCollapsed {
+  0% { opacity: 0; transform: translateY(calc(-50% + 6px)); filter: blur(1px); }
+  24% { opacity: .86; transform: translateY(-50%); filter: blur(0); }
+  72% { opacity: .72; transform: translateY(-50%); filter: blur(0); }
+  100% { opacity: 0; transform: translateY(calc(-50% - 4px)); filter: blur(1px); }
 }
 @keyframes timePulse {
   0%, 100% { filter: drop-shadow(0 0 4px rgba(240,198,116,.10)); }
