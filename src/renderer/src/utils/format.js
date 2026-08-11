@@ -9,9 +9,11 @@ export function formatDuration(sec) {
   return `${h}h${m > 0 ? String(m).padStart(2, '0') : ''}m`
 }
 
-export function formatTime(ts) {
+export function formatTime(ts, { seconds = false } = {}) {
   const d = new Date(ts)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  const base = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  if (!seconds) return base
+  return `${base}:${String(d.getSeconds()).padStart(2, '0')}`
 }
 
 export function formatDate(ts) {

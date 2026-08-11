@@ -25,6 +25,7 @@ if (!gotLock) {
     const shortcut = require('./services/shortcut')
     const activity = require('./services/activity')
     const todoReminder = require('./services/todoReminder')
+    const overtimeEvidenceReminder = require('./services/overtimeEvidenceReminder')
     const ipc = require('./ipc')
 
     // 1. 数据库
@@ -74,6 +75,7 @@ if (!gotLock) {
     // 8. 活动采集 + 待办提醒
     activity.start()
     todoReminder.start()
+    overtimeEvidenceReminder.start()
 
     // 9. 迷你栏状态同步
     syncMiniState(ledger.current())
@@ -226,9 +228,11 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   const activity = require('./services/activity')
   const todoReminder = require('./services/todoReminder')
+  const overtimeEvidenceReminder = require('./services/overtimeEvidenceReminder')
   const shortcut = require('./services/shortcut')
   activity.stop()
   todoReminder.stop()
+  overtimeEvidenceReminder.stop()
   shortcut.unregisterAll()
   if (server) server.close()
 })

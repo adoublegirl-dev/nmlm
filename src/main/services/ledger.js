@@ -183,9 +183,12 @@ function addPausePoint({ detail = null } = {}) {
 function listPausePointsByRange(start, end) { return pausePointsRepo.listByRange(start, end) }
 function listByRange(start, end) { return entriesRepo.listByRange(start, end) }
 
-function applyPausePointPlan({ entryId, points = [] } = {}) {
+function applyPausePointPlan({ entryId, points = [], baseTagId, detail } = {}) {
   const entry = entriesRepo.get(entryId)
   if (!entry) return { ok: false, error: '记录不存在' }
+  const finalBaseTagId = baseTagId !== undefined ? validTagId(baseTagId) : entry.tag_id
+  if (baseTagId != null && finalBaseTagId == null) return { ok: false, error: '标签不存在' }
+  const finalDetail = detail !== undefined ? detail : entry.detail
   const existing = pausePointsRepo.listByEntry(entry.id)
   const existingIds = new Set(existing.map((p) => p.id))
   for (const p of points) {
@@ -194,12 +197,15 @@ function applyPausePointPlan({ entryId, points = [] } = {}) {
     if (p.tagId != null && finalTagId == null) return { ok: false, error: '标签不存在' }
   }
 
-  const wantsSplit = points.some((p) => Number(p.tagId) !== Number(entry.tag_id))
+  const wantsSplit = points.some((p) => Number(p.tagId) !== Number(finalBaseTagId))
   if (wantsSplit && !entry.end_time) return { ok: false, error: '进行中的记录暂不支持拆分' }
 
   const tx = getDb().transaction(() => {
     for (const p of points) pausePointsRepo.update(p.id, { tagId: p.tagId, detail: p.detail || null })
-    if (!wantsSplit) return { entries: [entry], split: false, updatedOnly: true }
+    if (!wantsSplit) {
+      const updated = entriesRepo.updateMeta(entry.id, { tagId: finalBaseTagId, detail: finalDetail })
+      return { entries: [updated], split: false, updatedOnly: true }
+    }
 
     const latestEntry = entriesRepo.get(entry.id)
     const latestPoints = pausePointsRepo
@@ -209,11 +215,11 @@ function applyPausePointPlan({ entryId, points = [] } = {}) {
 
     const rawSegments = []
     let cursor = latestEntry.start_time
-    let currentTag = latestEntry.tag_id
+    let currentTag = finalBaseTagId
     for (const p of latestPoints) {
       if (p.ts > cursor) rawSegments.push({ start: cursor, end: p.ts, tagId: currentTag })
       cursor = p.ts
-      currentTag = p.tag_id == null ? latestEntry.tag_id : p.tag_id
+      currentTag = p.tag_id == null ? finalBaseTagId : p.tag_id
     }
     if (latestEntry.end_time > cursor) rawSegments.push({ start: cursor, end: latestEntry.end_time, tagId: currentTag })
 
@@ -236,7 +242,7 @@ function applyPausePointPlan({ entryId, points = [] } = {}) {
           endTime: s.end,
           durationSec,
           tagId: s.tagId,
-          detail: latestEntry.detail,
+          detail: finalDetail,
           windowTitle: latestEntry.window_title,
           isFragment
         })
@@ -246,7 +252,7 @@ function applyPausePointPlan({ entryId, points = [] } = {}) {
         endTime: s.end,
         durationSec,
         tagId: s.tagId,
-        detail: latestEntry.detail,
+        detail: finalDetail,
         windowTitle: latestEntry.window_title,
         isFragment,
         createdAt: latestEntry.created_at
