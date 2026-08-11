@@ -10,7 +10,7 @@ let reminderWin = null
 
 const RECORDER_WIDTH = 380
 const RECORDER_HEIGHT = 260
-const RECORDER_COLLAPSED_WIDTH = 176
+const RECORDER_COLLAPSED_WIDTH = 92
 const RECORDER_COLLAPSED_HEIGHT = 54
 const DIST_URL = () => `http://127.0.0.1:${require('./services/settings').get('server.port')}`
 

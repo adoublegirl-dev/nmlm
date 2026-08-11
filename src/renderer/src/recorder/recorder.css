@@ -191,18 +191,20 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
   position: absolute;
   left: 0;
   right: 0;
-  top: 3px;
+  top: calc(50% - .5px);
   height: 1px;
+  transform: none;
   border-radius: 999px;
   background: rgba(240,198,116,.18);
 }
 .motion-track::after {
   content: '';
   position: absolute;
-  left: 8%;
-  right: 50%;
-  top: 2px;
+  left: 0;
+  right: 44%;
+  top: calc(50% - 1.5px);
   height: 3px;
+  transform: none;
   border-radius: 999px;
   opacity: 0;
   background: linear-gradient(90deg, transparent, rgba(240,198,116,.16), rgba(240,198,116,.86));
@@ -211,11 +213,11 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
 .motion-dot {
   position: absolute;
   left: 50%;
-  top: 1px;
+  top: 50%;
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   background: #f0c674;
   box-shadow: 0 0 8px rgba(240,198,116,.44);
   opacity: .55;
@@ -224,9 +226,10 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
   display: none;
   position: absolute;
   left: 58%;
-  top: 0;
+  top: 50%;
   width: 2px;
   height: 8px;
+  transform: translateY(-50%);
   border-radius: 999px;
   background: #8fbea0;
   box-shadow: 0 0 8px rgba(143,190,160,.48);
@@ -263,9 +266,12 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
   background-position: 0 0, 0 0, 0 0;
   transition: opacity .22s ease, background .22s ease;
 }
-.collapsed .main-row,
-.collapsed .motion-track {
+.collapsed .main-row {
   position: relative;
+  z-index: 1;
+}
+.collapsed .motion-track {
+  position: absolute;
   z-index: 1;
 }
 .collapsed .titlebar,
@@ -279,16 +285,28 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
 }
 .collapsed .main-row {
   -webkit-app-region: no-drag;
-  justify-content: flex-start;
+  justify-content: center;
+  align-items: center;
   gap: 0;
   transform: translateY(0);
   width: 100%;
+  height: 100%;
 }
-.collapsed .timer-block {
-  display: none;
+.collapsed .timer-block,
+.collapsed .current-tag-label,
+.collapsed .pause-delta,
+.collapsed .task-hint { display: none !important; }
+.collapsed .motion-track {
+  display: block;
+  z-index: 1;
+  left: 2px;
+  right: 2px;
+  top: 0;
+  bottom: 0;
+  height: auto;
+  opacity: .92;
+  transform: none;
 }
-.collapsed .task-hint { display: none; }
-.collapsed .motion-track { display: block; }
 .collapsed.is-idle .recorder::before { opacity: 0; }
 .collapsed.is-idle .motion-track::before { background: rgba(255,255,255,.10); }
 .collapsed.is-idle .motion-dot {
@@ -301,8 +319,8 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
   animation: capsuleBgFlow 3.2s linear infinite;
 }
 .collapsed.is-recording .motion-track::before {
-  height: 2px;
-  top: 3px;
+  height: 1px;
+  top: calc(50% - .5px);
   background:
     linear-gradient(90deg, rgba(240,198,116,.06), rgba(240,198,116,.24), rgba(240,198,116,.06)),
     repeating-linear-gradient(90deg, rgba(240,198,116,.12) 0 10px, rgba(240,198,116,.36) 10px 12px, rgba(240,198,116,.10) 12px 24px);
@@ -327,8 +345,9 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
   animation: capsuleBgFlow 6s linear infinite;
 }
 .collapsed.is-paused .motion-track::before {
-  height: 2px;
-  background: rgba(143,190,160,.18);
+  height: 1px;
+  top: calc(50% - .5px);
+  background: rgba(143,190,160,.20);
 }
 .collapsed.is-paused .motion-track::after {
   opacity: .28;
@@ -343,6 +362,8 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
 .collapsed.is-paused .motion-mark {
   display: block;
   left: 50%;
+  height: 8px;
+  top: 50%;
 }
 @keyframes timePulse {
   0%, 100% { filter: drop-shadow(0 0 4px rgba(240,198,116,.10)); }
@@ -361,6 +382,6 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
   50% { opacity: 1; filter: drop-shadow(0 0 8px rgba(240,198,116,.48)); }
 }
 @keyframes centerHeadPulse {
-  0%, 100% { transform: translateX(-50%) scale(.9); box-shadow: 0 0 8px rgba(240,198,116,.34); }
-  50% { transform: translateX(-50%) scale(1.08); box-shadow: 0 0 13px rgba(240,198,116,.62); }
+  0%, 100% { transform: translate(-50%, -50%) scale(.9); box-shadow: 0 0 8px rgba(240,198,116,.34); }
+  50% { transform: translate(-50%, -50%) scale(1.08); box-shadow: 0 0 13px rgba(240,198,116,.62); }
 }
