@@ -15,7 +15,7 @@ let recorderMessageTimer = null
 const RECORDER_WIDTH = 380
 const RECORDER_HEIGHT = 260
 const RECORDER_COLLAPSED_WIDTH = 92
-const RECORDER_MESSAGE_WIDTH = 220
+const RECORDER_MESSAGE_WIDTH = RECORDER_COLLAPSED_WIDTH
 const RECORDER_COLLAPSED_HEIGHT = 54
 const DIST_URL = () => `http://127.0.0.1:${require('./services/settings').get('server.port')}`
 
@@ -189,6 +189,7 @@ function showRecorderMessage(payload = {}) {
   recorderWin.webContents.send(EVENTS.RECORDER_MESSAGE, latestRecorderMessage)
   clearTimeout(recorderMessageTimer)
   if (recorderCollapsed) {
+    // 收起态消息不改变窗口尺寸，只在原胶囊内呼吸式浮现。
     setRecorderMessageMode(true)
     recorderMessageTimer = setTimeout(() => {
       if (recorderCollapsed) setRecorderMessageMode(false)

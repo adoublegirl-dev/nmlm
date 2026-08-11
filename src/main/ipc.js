@@ -40,18 +40,18 @@ function broadcast(event, payload) {
 function wireServiceEmitters() {
   ledger.attachEventSender((data) => {
     broadcast(EVENTS.LEDGER_STATE_CHANGED, data)
-    const map = { recording: '已接续', paused: '留一个断点', completed: '已存档', idle: '已静默' }
+    const map = { recording: '接续', paused: '断点', completed: '存档', idle: '静默' }
     if (map[data?.state]) windows.showRecorderMessage({ type: data.state === 'paused' ? 'info' : 'success', text: map[data.state], duration: 1800 })
   })
   evidence.attachEventSender((event, payload) => {
     broadcast(event, payload)
-    if (event === EVENTS.CAPTURE_DONE || event === 'capture:done') windows.showRecorderMessage({ type: payload?.ok === false ? 'error' : 'success', text: payload?.ok === false ? '未落盘' : '已落盘', duration: 2000 })
+    if (event === EVENTS.CAPTURE_DONE || event === 'capture:done') windows.showRecorderMessage({ type: payload?.ok === false ? 'error' : 'success', text: payload?.ok === false ? '未落' : '落盘', duration: 2000 })
   })
   activity.attachEventSender((event, payload) => broadcast(event, payload))
   settings.attachEventSender((data) => broadcast(EVENTS.SETTINGS_CHANGED, data))
   todos.attachEventSender((data) => {
     broadcast(EVENTS.TODO_CHANGED, data)
-    if (data?.type === 'created') windows.showRecorderMessage({ type: 'info', text: '有新钉子', duration: 1800 })
+    if (data?.type === 'created') windows.showRecorderMessage({ type: 'info', text: '新钉', duration: 1800 })
   })
 }
 

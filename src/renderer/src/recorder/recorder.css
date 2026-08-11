@@ -334,14 +334,15 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
 .collapsed .pause-delta,
 .collapsed .task-hint { display: none !important; }
 .collapsed .message-badge {
-  left: 8px;
-  right: 8px;
+  left: 6px;
+  right: 6px;
   top: 50%;
   bottom: auto;
-  height: 30px;
-  line-height: 30px;
+  height: 26px;
+  line-height: 26px;
   transform: translateY(calc(-50% + 5px));
-  font-size: 13px;
+  font-size: 11px;
+  letter-spacing: .16em;
 }
 .collapsed.has-message .message-badge {
   transform: translateY(-50%);

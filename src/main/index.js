@@ -209,7 +209,7 @@ function evidenceCapture() {
     if (!r.ok) {
       const { Notification } = require('electron')
       new Notification({ title: '牛马联盟', body: `截图失败: ${r.error}` }).show()
-      windows.showRecorderMessage({ type: 'error', text: '未落盘', duration: 2400 })
+      windows.showRecorderMessage({ type: 'error', text: '未落', duration: 2400 })
     }
   })
 }
