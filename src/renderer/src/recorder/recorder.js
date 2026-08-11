@@ -12,13 +12,20 @@ app.innerHTML = `
       </div>
 
       <div class="main-row no-drag">
-        <div id="timer" class="timer num">00:00:00</div>
+        <div class="timer-block">
+          <div id="currentTagLabel" class="current-tag-label">未选择标签</div>
+          <div class="timer-line">
+            <div id="timer" class="timer num">00:00:00</div>
+            <div id="pauseDelta" class="pause-delta num hidden">+00:00</div>
+          </div>
+        </div>
         <button id="toggleBtn" class="icon-action primary" title="开始">▶</button>
         <button id="stopBtn" class="icon-action danger" title="停止">■</button>
         <div id="tagDropdown" class="tag-dropdown">
           <button id="tagButton" class="tag-button" title="选择标签">标签</button>
         </div>
       </div>
+      <div id="taskHint" class="task-hint no-drag">选择标签后开始记录</div>
     </div>
   </div>
 `
@@ -39,6 +46,14 @@ function hms(sec) {
   const m = Math.floor((sec % 3600) / 60)
   const s = sec % 60
   return `${pad(h)}:${pad(m)}:${pad(s)}`
+}
+
+function hmShort(sec) {
+  sec = Math.max(0, Math.floor(sec || 0))
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = sec % 60
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`
 }
 
 async function loadSettings() {
@@ -64,11 +79,25 @@ function currentTag() {
   return tags.find((t) => t.id === Number(selectedTagId)) || null
 }
 
+function activeTag() {
+  const id = current?.active_tag_id || current?.tag_id
+  if (id) return tags.find((t) => t.id === Number(id)) || null
+  return currentTag()
+}
+
 function renderTagButton() {
   const btn = document.getElementById('tagButton')
   const tag = currentTag()
   btn.textContent = tag ? tag.name : '标签'
   btn.title = tag ? tag.name : '选择标签'
+}
+
+function renderCurrentTagLabel() {
+  const label = document.getElementById('currentTagLabel')
+  const tag = activeTag()
+  const name = tag ? tag.name : '未选择标签'
+  label.textContent = current ? name : (tag ? `待开始 · ${name}` : '未选择标签')
+  label.title = name
 }
 
 function renderTags() {
@@ -132,21 +161,34 @@ function render() {
   const timer = document.getElementById('timer')
   const toggleBtn = document.getElementById('toggleBtn')
   const stopBtn = document.getElementById('stopBtn')
+  const hint = document.getElementById('taskHint')
+  const pauseDelta = document.getElementById('pauseDelta')
 
   renderTagButton()
+  renderCurrentTagLabel()
   if (current) {
     const end = current.paused ? current.paused_at : Date.now()
     timer.textContent = hms((end - current.start_time) / 1000)
+    if (current.paused) {
+      const deltaSec = (Date.now() - current.paused_at) / 1000
+      pauseDelta.textContent = `+${hmShort(deltaSec)}`
+      pauseDelta.classList.remove('hidden')
+    } else {
+      pauseDelta.classList.add('hidden')
+    }
     toggleBtn.textContent = current.paused ? '▶' : 'Ⅱ'
     toggleBtn.title = current.paused ? '继续' : '暂停'
     toggleBtn.disabled = false
     stopBtn.disabled = false
+    hint.textContent = current.paused ? '暂停中：右侧增量会在继续后并入当前片段' : '进行中：暂停会留下一个可整理的时间节点'
   } else {
     timer.textContent = '00:00:00'
+    pauseDelta.classList.add('hidden')
     toggleBtn.textContent = '▶'
     toggleBtn.title = '开始'
     toggleBtn.disabled = false
     stopBtn.disabled = true
+    hint.textContent = selectedTag() ? '点击开始记录当前标签' : '选择标签后开始记录'
   }
 }
 

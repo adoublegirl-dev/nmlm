@@ -11,7 +11,7 @@
         <button v-if="!recording" class="btn primary" @click="doStart">开始记录</button>
         <template v-else>
           <button class="btn primary" @click="doStop">完成记录</button>
-          <button class="btn" @click="doPause">暂停点</button>
+          <button class="btn" @click="doPause">加节点</button>
         </template>
       </div>
     </div>
@@ -33,14 +33,32 @@
           <span class="tag-chip" :style="{ background: s.color + '26', color: s.color }">{{ s.tagName }}</span>
           <span class="seg-dur num">{{ s.durText }}</span>
           <span v-if="s.is_fragment" class="frag muted">碎片</span>
-          <span v-if="s.pausePoints?.length" class="pause-chip">暂停点 × {{ s.pausePoints.length }}</span>
+          <span class="pause-chip">时间节点 × {{ s.nodeCount }}</span>
           <span v-if="s.detail" class="seg-detail muted">{{ s.detail }}</span>
         </div>
-        <div v-if="s.pausePoints?.length" class="pause-points">
-          <span v-for="p in s.pausePoints" :key="p.id" class="pause-dot" :title="p.detail || '暂停点'">{{ p.timeText }}</span>
+        <div class="entry-track" :title="s.trackTitle">
+          <div
+            v-for="slice in s.timelineSlices"
+            :key="slice.key"
+            class="track-slice"
+            :class="{ marked: slice.fromPause }"
+            :style="{ left: slice.left + '%', width: slice.width + '%', background: slice.color + (slice.fromPause ? 'B8' : 'E6') }"
+            :title="slice.title"
+          ></div>
+          <button
+            v-for="node in s.timeNodes"
+            :key="node.key"
+            class="track-marker"
+            :class="[node.type, { empty: node.type === 'pause' && !node.detail }]"
+            :style="{ left: node.left + '%' }"
+            :title="node.title"
+            @click.stop="node.type === 'pause' && openEdit(s)"
+          >{{ node.shortText }}</button>
         </div>
-        <div class="seg-bar">
-          <div class="seg-fill" :style="{ width: s.widthPct + '%', background: s.color }"></div>
+        <div v-if="s.pausePoints?.length" class="pause-summary muted">
+          <span v-for="p in s.pausePoints" :key="p.id" class="pause-summary-item">
+            节点 {{ p.timeText }}{{ p.detail ? ' · ' + p.detail : ' · 未说明' }}
+          </span>
         </div>
       </div>
     </div>
@@ -60,14 +78,14 @@
         </div>
         <textarea v-model="editForm.detail" class="input edit-detail" placeholder="写点什么：这段在做什么、为什么被切碎…" rows="3"></textarea>
         <div v-if="editEntry.pausePoints?.length" class="pause-editor">
-          <h4>暂停点切分</h4>
-          <div class="muted split-hint">暂停点标签表示“从该暂停点开始到下一个暂停点/结束”的标签。不同标签会拆分记录，连续同标签会自动合并。</div>
+          <h4>时间节点切分</h4>
+          <div class="muted split-hint">节点标签表示“从该节点开始到下一个节点/结束”的标签。不同标签会拆分记录，连续同标签会自动合并。</div>
           <div v-for="p in editForm.pausePoints" :key="p.id" class="pause-edit-row">
             <span class="num">{{ p.timeText }}</span>
             <select class="input pause-select" v-model.number="p.tagId">
               <option v-for="t in tags" :key="t.id" :value="t.id">{{ t.name }}</option>
             </select>
-            <input class="input pause-detail" v-model="p.detail" placeholder="暂停点文字记录" />
+            <input class="input pause-detail" v-model="p.detail" placeholder="节点文字记录" />
           </div>
         </div>
         <div class="edit-ops">
@@ -136,10 +154,10 @@ async function load() {
     const pointsRes = await api('ledger:pausePoints', { start, end }).catch(() => ({ points: [] }))
     const eff = await api('report:effectiveHours', { date: curDate.value })
     const raw = (r.entries || []).slice().sort((a, b) => b.start_time - a.start_time)
-    let maxDur = 0
     const pointsByEntry = new Map()
     for (const p of pointsRes.points || []) {
       p.timeText = formatTime(p.ts)
+      p.shortText = formatTime(p.ts).slice(0, 5)
       if (!pointsByEntry.has(p.entry_id)) pointsByEntry.set(p.entry_id, [])
       pointsByEntry.get(p.entry_id).push(p)
     }
@@ -152,7 +170,6 @@ async function load() {
       e.durText = formatDuration(e.duration_sec || 0)
       e.startText = formatTime(e.start_time)
       e.endText = e.end_time ? formatTime(e.end_time) : '…'
-      maxDur = Math.max(maxDur, e.duration_sec || 0)
     }
     // 未完成记录实时刷新；暂停态停在 paused_at，避免视觉上继续跳秒。
     for (const e of raw) {
@@ -160,9 +177,7 @@ async function load() {
         const endAt = e.paused ? e.paused_at : Date.now()
         e.durText = formatDuration(Math.floor((endAt - e.start_time) / 1000))
       }
-    }
-    for (const e of raw) {
-      e.widthPct = maxDur ? Math.max(2, Math.round(((e.duration_sec || 0) / maxDur) * 100)) : 0
+      decorateEntryTimeline(e, tagMap)
     }
     segments.value = raw
     totalSec.value = raw.reduce((s, e) => s + (e.duration_sec || 0), 0)
@@ -173,6 +188,72 @@ async function load() {
   } catch (e) {
     /* 静默 */
   }
+}
+
+function decorateEntryTimeline(entry, tagMap) {
+  const trackEnd = entry.end_time || (entry.paused ? entry.paused_at : Date.now())
+  const totalMs = Math.max(1, trackEnd - entry.start_time)
+  const cleanPoints = (entry.pausePoints || [])
+    .filter((p) => p.ts > entry.start_time && p.ts < trackEnd)
+    .sort((a, b) => a.ts - b.ts)
+
+  entry.pausePoints = cleanPoints.map((p) => ({
+    ...p,
+    left: clampPct(((p.ts - entry.start_time) / totalMs) * 100)
+  }))
+
+  const boundaries = [entry.start_time, ...entry.pausePoints.map((p) => p.ts), trackEnd]
+  entry.timelineSlices = []
+  for (let i = 0; i < boundaries.length - 1; i += 1) {
+    const sliceStart = boundaries[i]
+    const sliceEnd = boundaries[i + 1]
+    if (sliceEnd <= sliceStart) continue
+    const fromPoint = i === 0 ? null : entry.pausePoints[i - 1]
+    const sliceTag = tagMap.get(fromPoint?.tag_id) || tagMap.get(entry.tag_id) || { name: '未分类', color: '#9D9D9D' }
+    const left = clampPct(((sliceStart - entry.start_time) / totalMs) * 100)
+    const width = Math.max(1.2, clampPct(((sliceEnd - sliceStart) / totalMs) * 100))
+    entry.timelineSlices.push({
+      key: `${entry.id}-${i}-${sliceStart}`,
+      left,
+      width,
+      color: sliceTag.color,
+      fromPause: !!fromPoint,
+      title: `${formatTime(sliceStart)} – ${formatTime(sliceEnd)} · ${sliceTag.name}${fromPoint?.detail ? ' · ' + fromPoint.detail : ''}`
+    })
+  }
+  if (!entry.timelineSlices.length) {
+    entry.timelineSlices.push({ key: `${entry.id}-empty`, left: 0, width: 100, color: entry.color, fromPause: false, title: entry.tagName })
+  }
+  entry.timeNodes = [
+    {
+      key: `${entry.id}-start`,
+      type: 'start',
+      left: 0,
+      shortText: entry.startText.slice(0, 5),
+      title: `${entry.startText} · 开始 · ${entry.tagName}`
+    },
+    ...entry.pausePoints.map((p) => ({
+      key: `${entry.id}-pause-${p.id}`,
+      type: 'pause',
+      left: p.left,
+      shortText: p.shortText,
+      detail: p.detail,
+      title: p.detail ? `${p.timeText} · 节点 · ${p.detail}` : `${p.timeText} · 节点 · 未填写说明`
+    })),
+    {
+      key: `${entry.id}-end`,
+      type: entry.end_time ? 'end' : 'now',
+      left: 100,
+      shortText: entry.end_time ? entry.endText.slice(0, 5) : '现在',
+      title: entry.end_time ? `${entry.endText} · 结束` : '进行中 · 当前时间'
+    }
+  ]
+  entry.nodeCount = entry.timeNodes.length
+  entry.trackTitle = `${entry.startText} – ${entry.endText} · ${entry.durText}`
+}
+
+function clampPct(n) {
+  return Math.max(0, Math.min(100, Number.isFinite(n) ? n : 0))
 }
 
 function startOfDay(ts) {
@@ -221,14 +302,14 @@ async function saveEdit() {
     const baseTag = editEntry.value.tag_id
     const willSplit = editForm.value.pausePoints.some((p) => Number(p.tagId) !== Number(baseTag))
     if (willSplit) {
-      const ok = confirm('暂停点中存在与当前记录不同的标签。确认后，当前记录将按暂停点拆分成多条，并自动合并连续相同标签。')
+      const ok = confirm('时间节点中存在与当前记录不同的标签。确认后，当前记录将按节点拆分成多条，并自动合并连续相同标签。')
       if (!ok) return
     }
     const r = await api('ledger:applyPausePointPlan', {
       entryId: editEntry.value.id,
       points: editForm.value.pausePoints.map((p) => ({ id: p.id, tagId: p.tagId, detail: p.detail?.trim() || null }))
     })
-    if (r.split) alert('已按暂停点拆分并刷新台账')
+    if (r.split) alert('已按时间节点拆分并刷新台账')
   }
   editEntry.value = null
   load()
@@ -264,10 +345,71 @@ onBeforeUnmount(() => {
 .seg-dur { font-size: 13px; font-weight: 500; }
 .frag { font-size: 12px; }
 .pause-chip { font-size: 12px; color: var(--gold); background: rgba(224,188,114,0.12); border: 1px solid rgba(224,188,114,0.28); padding: 1px 7px; border-radius: 999px; }
-.pause-points { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
-.pause-dot { font-size: 11px; color: var(--text-dim); border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); padding: 1px 6px; border-radius: 999px; }
-.seg-bar { height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; margin-top: 6px; overflow: hidden; }
-.seg-fill { height: 100%; border-radius: 4px; opacity: 0.75; }
+.entry-track {
+  position: relative;
+  height: 38px;
+  margin-top: 8px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.045);
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
+}
+.track-slice {
+  position: absolute;
+  top: 22px;
+  height: 8px;
+  min-width: 2px;
+  border-radius: 999px;
+  opacity: .9;
+}
+.track-slice.marked {
+  opacity: .72;
+  background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.16) 0 5px, transparent 5px 10px);
+}
+.track-marker {
+  position: absolute;
+  top: 4px;
+  transform: translateX(-50%);
+  height: 18px;
+  min-width: 34px;
+  padding: 0 5px;
+  border-radius: 999px;
+  border: 1px solid rgba(224,188,114,0.45);
+  background: rgba(32,35,41,.96);
+  color: var(--gold);
+  font-size: 10px;
+  line-height: 16px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,.18);
+}
+.track-marker::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  width: 1px;
+  height: 8px;
+  background: rgba(224,188,114,0.6);
+}
+.track-marker.start,
+.track-marker.end,
+.track-marker.now {
+  min-width: 34px;
+  color: var(--text-dim);
+  border-color: rgba(255,255,255,.16);
+  background: rgba(32,35,41,.82);
+  cursor: default;
+}
+.track-marker.start { transform: translateX(0); }
+.track-marker.end,
+.track-marker.now { transform: translateX(-100%); }
+.track-marker.now { color: var(--green); border-color: rgba(127,169,140,.42); }
+.track-marker.empty {
+  color: #f1a28f;
+  border-color: rgba(241,162,143,.45);
+}
+.pause-summary { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; font-size: 11px; }
+.pause-summary-item { max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .seg-detail { margin-top: 4px; font-size: 12px; }
 .empty { text-align: center; padding: 40px 0; }
 .mask {

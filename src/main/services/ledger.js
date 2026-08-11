@@ -13,16 +13,24 @@ function rawCurrent() {
   return entriesRepo.current() || null
 }
 
+function activeSegmentTagId(entry) {
+  if (!entry) return null
+  const points = pausePointsRepo.listByEntry(entry.id)
+  const latest = points[points.length - 1]
+  return latest && latest.tag_id != null ? latest.tag_id : entry.tag_id
+}
+
 function decoratePaused(entry) {
   if (!entry) {
     pausedSession = null
     return null
   }
+  const activeTagId = activeSegmentTagId(entry)
   if (pausedSession && pausedSession.entryId === entry.id) {
-    return { ...entry, paused: true, paused_at: pausedSession.pausedAt, pause_point_id: pausedSession.pointId }
+    return { ...entry, active_tag_id: activeTagId, paused: true, paused_at: pausedSession.pausedAt, pause_point_id: pausedSession.pointId }
   }
   if (pausedSession && pausedSession.entryId !== entry.id) pausedSession = null
-  return { ...entry, paused: false }
+  return { ...entry, active_tag_id: activeTagId, paused: false }
 }
 
 function validTagId(tagId) {
@@ -106,7 +114,7 @@ async function pause({ detail = null } = {}) {
   if (!cur) return { ok: false, error: '没有进行中的记录' }
   if (pausedSession && pausedSession.entryId === cur.id) return { ok: true, entry: decoratePaused(cur), paused: true }
   const pausedAt = Date.now()
-  const point = pausePointsRepo.insert({ entryId: cur.id, ts: pausedAt, detail, tagId: cur.tag_id })
+  const point = pausePointsRepo.insert({ entryId: cur.id, ts: pausedAt, detail, tagId: activeSegmentTagId(cur) })
   pausedSession = { entryId: cur.id, pointId: point.id, pausedAt }
   const entry = decoratePaused(cur)
   emit('paused', { entry, point })
