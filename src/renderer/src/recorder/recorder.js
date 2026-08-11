@@ -26,6 +26,10 @@ app.innerHTML = `
         </div>
       </div>
       <div id="taskHint" class="task-hint no-drag">选择标签后开始记录</div>
+      <div class="motion-track" aria-hidden="true">
+        <span class="motion-dot"></span>
+        <span class="motion-mark"></span>
+      </div>
     </div>
   </div>
 `
@@ -157,6 +161,13 @@ async function refresh() {
   render()
 }
 
+function renderStateClass() {
+  const shell = document.querySelector('.recorder-shell')
+  shell.classList.toggle('is-idle', !current)
+  shell.classList.toggle('is-recording', !!current && !current.paused)
+  shell.classList.toggle('is-paused', !!current?.paused)
+}
+
 function render() {
   const timer = document.getElementById('timer')
   const toggleBtn = document.getElementById('toggleBtn')
@@ -166,21 +177,21 @@ function render() {
 
   renderTagButton()
   renderCurrentTagLabel()
+  renderStateClass()
   if (current) {
     const end = current.paused ? current.paused_at : Date.now()
     timer.textContent = hms((end - current.start_time) / 1000)
+    let pausedDeltaText = ''
     if (current.paused) {
       const deltaSec = (Date.now() - current.paused_at) / 1000
-      pauseDelta.textContent = `+${hmShort(deltaSec)}`
-      pauseDelta.classList.remove('hidden')
-    } else {
-      pauseDelta.classList.add('hidden')
+      pausedDeltaText = hms(deltaSec)
     }
+    pauseDelta.classList.add('hidden')
     toggleBtn.textContent = current.paused ? '▶' : 'Ⅱ'
     toggleBtn.title = current.paused ? '继续' : '暂停'
     toggleBtn.disabled = false
     stopBtn.disabled = false
-    hint.textContent = current.paused ? '暂停中：右侧增量会在继续后并入当前片段' : '进行中：暂停会留下一个可整理的时间节点'
+    hint.textContent = current.paused ? `暂停中：${pausedDeltaText}` : '进行中：暂停会留下一个可整理的时间节点'
   } else {
     timer.textContent = '00:00:00'
     pauseDelta.classList.add('hidden')
