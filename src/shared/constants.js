@@ -65,6 +65,7 @@ const IPC = {
   RECORDER_SET_COLLAPSED: 'recorder:setCollapsed',
   RECORDER_SET_MESSAGE_MODE: 'recorder:setMessageMode',
   RECORDER_SHOW_MESSAGE: 'recorder:showMessage',
+  RECORDER_GET_MESSAGE: 'recorder:getMessage',
   // legacy mini dock aliases
   MINI_HIDE: 'mini:hide',
   MINI_SET_POS: 'mini:setPos',

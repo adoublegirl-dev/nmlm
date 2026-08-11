@@ -210,8 +210,6 @@ function evidenceCapture() {
       const { Notification } = require('electron')
       new Notification({ title: '牛马联盟', body: `截图失败: ${r.error}` }).show()
       windows.showRecorderMessage({ type: 'error', text: '截图失败', duration: 2400 })
-    } else {
-      windows.showRecorderMessage({ type: 'success', text: '截图已保存', duration: 2000 })
     }
   })
 }

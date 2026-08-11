@@ -7,6 +7,10 @@ const { EVENTS } = require('../shared/constants')
 let recorderWin = null
 let tagPickerWin = null
 let reminderWin = null
+let recorderCollapsed = false
+let recorderMessageSeq = 0
+let latestRecorderMessage = null
+let recorderMessageTimer = null
 
 const RECORDER_WIDTH = 380
 const RECORDER_HEIGHT = 260
@@ -145,6 +149,7 @@ function applyRecorderShape(collapsed, width, height) {
 
 function setRecorderCollapsed(collapsed) {
   if (!recorderWin || recorderWin.isDestroyed()) return { ok: false, error: '记录器未创建' }
+  recorderCollapsed = !!collapsed
   const b = recorderWin.getBounds()
   const right = b.x + b.width
   const bottom = b.y + b.height
@@ -169,10 +174,31 @@ function setRecorderMessageMode(active) {
 }
 
 function showRecorderMessage(payload = {}) {
+  const text = String(payload.text || '').trim()
+  if (!text) return { ok: false, error: '消息为空' }
   if (!recorderWin || recorderWin.isDestroyed()) createRecorder()
   if (!recorderWin || recorderWin.isDestroyed()) return { ok: false, error: '记录器未创建' }
-  recorderWin.webContents.send(EVENTS.RECORDER_MESSAGE, payload)
-  return { ok: true }
+  const duration = Number(payload.duration || 2000)
+  latestRecorderMessage = {
+    id: ++recorderMessageSeq,
+    type: payload.type || 'info',
+    text,
+    duration,
+    createdAt: Date.now()
+  }
+  recorderWin.webContents.send(EVENTS.RECORDER_MESSAGE, latestRecorderMessage)
+  clearTimeout(recorderMessageTimer)
+  if (recorderCollapsed) {
+    setRecorderMessageMode(true)
+    recorderMessageTimer = setTimeout(() => {
+      if (recorderCollapsed) setRecorderMessageMode(false)
+    }, duration + 120)
+  }
+  return { ok: true, message: latestRecorderMessage }
+}
+
+function getRecorderMessage() {
+  return { ok: true, message: latestRecorderMessage }
 }
 
 function setRecorderPos(x, y) {
@@ -253,6 +279,7 @@ module.exports = {
   setRecorderCollapsed,
   setRecorderMessageMode,
   showRecorderMessage,
+  getRecorderMessage,
   // 兼容旧名字，避免外围调用崩
   getMini,
   hideMiniToTray,

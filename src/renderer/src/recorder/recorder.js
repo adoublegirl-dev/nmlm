@@ -44,6 +44,7 @@ let collapsed = false
 let idleTimer = null
 let messageTimer = null
 let activeMessage = null
+let lastMessageId = null
 const IDLE_COLLAPSE_MS = 5000
 
 function pad(n) { return String(n).padStart(2, '0') }
@@ -142,6 +143,8 @@ function setCollapsed(next, syncWindow = true) {
 }
 
 function showMessage(payload = {}) {
+  if (payload.id && payload.id === lastMessageId) return
+  if (payload.id) lastMessageId = payload.id
   const text = String(payload.text || '').trim()
   if (!text) return
   const type = payload.type || 'info'
@@ -288,26 +291,30 @@ document.addEventListener('click', (e) => {
   if (!document.getElementById('tagDropdown').contains(e.target)) setMenu(false)
 })
 
-on('ledger:state-changed', (data) => {
-  const wasPaused = !!current?.paused
-  refresh()
-  if (data?.state === 'recording') showMessage({ type: 'success', text: wasPaused ? '继续记录' : '开始记录', duration: 1600 })
-  else if (data?.state === 'paused') showMessage({ type: 'info', text: '已暂停', duration: 1600 })
-  else if (data?.state === 'completed') showMessage({ type: 'success', text: '已存档', duration: 1800 })
-})
-on('capture:done', () => showMessage({ type: 'success', text: '截图已保存', duration: 2000 }))
-on('todo:changed', (data) => {
-  if (data?.type === 'created') showMessage({ type: 'info', text: '待办 +1', duration: 1800 })
-})
+on('ledger:state-changed', () => refresh())
 on('recorder:message', showMessage)
 on('recorder:expand', () => setCollapsed(false, false))
+
+async function pollMessage() {
+  try {
+    const r = await api('recorder:getMessage')
+    const msg = r.message
+    if (!msg || !msg.id || msg.id === lastMessageId) return
+    if (Date.now() - msg.createdAt > (msg.duration || 2000) + 800) return
+    showMessage(msg)
+  } catch (_) {
+    // 静默：旧服务或浏览器预览环境可能没有该通道。
+  }
+}
 
 Promise.resolve()
   .then(loadSettings)
   .then(loadTags)
   .then(refresh)
   .then(resetIdleTimer)
+  .then(pollMessage)
 
 setInterval(() => {
   refresh().catch(() => render())
 }, 1000)
+setInterval(pollMessage, 500)

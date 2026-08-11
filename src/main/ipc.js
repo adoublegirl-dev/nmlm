@@ -38,11 +38,21 @@ function broadcast(event, payload) {
 }
 
 function wireServiceEmitters() {
-  ledger.attachEventSender((data) => broadcast(EVENTS.LEDGER_STATE_CHANGED, data))
-  evidence.attachEventSender((event, payload) => broadcast(event, payload))
+  ledger.attachEventSender((data) => {
+    broadcast(EVENTS.LEDGER_STATE_CHANGED, data)
+    const map = { recording: '开始/继续记录', paused: '已暂停', completed: '已存档', idle: '已停止' }
+    if (map[data?.state]) windows.showRecorderMessage({ type: data.state === 'paused' ? 'info' : 'success', text: map[data.state], duration: 1800 })
+  })
+  evidence.attachEventSender((event, payload) => {
+    broadcast(event, payload)
+    if (event === EVENTS.CAPTURE_DONE || event === 'capture:done') windows.showRecorderMessage({ type: payload?.ok === false ? 'error' : 'success', text: payload?.ok === false ? '截图失败' : '截图已保存', duration: 2000 })
+  })
   activity.attachEventSender((event, payload) => broadcast(event, payload))
   settings.attachEventSender((data) => broadcast(EVENTS.SETTINGS_CHANGED, data))
-  todos.attachEventSender((data) => broadcast(EVENTS.TODO_CHANGED, data))
+  todos.attachEventSender((data) => {
+    broadcast(EVENTS.TODO_CHANGED, data)
+    if (data?.type === 'created') windows.showRecorderMessage({ type: 'info', text: '待办 +1', duration: 1800 })
+  })
 }
 
 // ---------- 通道实现 ----------
@@ -147,6 +157,7 @@ function registerAll() {
   registerHandler(IPC.RECORDER_SET_COLLAPSED, (a) => windows.setRecorderCollapsed(!!a.collapsed))
   registerHandler(IPC.RECORDER_SET_MESSAGE_MODE, (a) => windows.setRecorderMessageMode(!!a.active))
   registerHandler(IPC.RECORDER_SHOW_MESSAGE, (a) => windows.showRecorderMessage(a))
+  registerHandler(IPC.RECORDER_GET_MESSAGE, () => windows.getRecorderMessage())
   // legacy mini aliases
   registerHandler(IPC.MINI_HIDE, () => {
     windows.hideRecorder(true)
