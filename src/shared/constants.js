@@ -63,6 +63,8 @@ const IPC = {
   RECORDER_SET_POS: 'recorder:setPos',
   RECORDER_SET_MENU_OPEN: 'recorder:setMenuOpen',
   RECORDER_SET_COLLAPSED: 'recorder:setCollapsed',
+  RECORDER_SET_MESSAGE_MODE: 'recorder:setMessageMode',
+  RECORDER_SHOW_MESSAGE: 'recorder:showMessage',
   // legacy mini dock aliases
   MINI_HIDE: 'mini:hide',
   MINI_SET_POS: 'mini:setPos',
@@ -81,7 +83,8 @@ const EVENTS = {
   SHORTCUT_CONFLICT: 'shortcut:conflict',
   ACTIVITY_SNAPSHOT: 'activity:snapshot',
   TODO_CHANGED: 'todo:changed',
-  RECORDER_EXPAND: 'recorder:expand'
+  RECORDER_EXPAND: 'recorder:expand',
+  RECORDER_MESSAGE: 'recorder:message'
 }
 
 // ---------- 默认配置 ----------

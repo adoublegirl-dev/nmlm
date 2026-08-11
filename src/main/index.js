@@ -168,6 +168,7 @@ async function onStartShortcut() {
   if (!tag) {
     const { Notification } = require('electron')
     new Notification({ title: '牛马联盟', body: '没有可用标签，请先在设置里创建标签' }).show()
+    windows.showRecorderMessage({ type: 'warning', text: '没有可用标签', duration: 2400 })
     return { ok: false, error: '没有可用标签' }
   }
   const current = ledger.current()
@@ -204,9 +205,13 @@ function evidenceCapture() {
   const evidence = require('./services/evidence')
   const tray = require('./tray')
   evidence.capture().then((r) => {
+    const windows = require('./windows')
     if (!r.ok) {
       const { Notification } = require('electron')
       new Notification({ title: '牛马联盟', body: `截图失败: ${r.error}` }).show()
+      windows.showRecorderMessage({ type: 'error', text: '截图失败', duration: 2400 })
+    } else {
+      windows.showRecorderMessage({ type: 'success', text: '截图已保存', duration: 2000 })
     }
   })
 }

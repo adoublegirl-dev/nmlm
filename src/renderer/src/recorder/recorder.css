@@ -176,6 +176,51 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.message-badge {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 9px;
+  z-index: 5;
+  height: 24px;
+  line-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px) scale(.98);
+  transition: opacity .18s ease, transform .2s ease, background .2s ease, color .2s ease, border-color .2s ease;
+  border: 1px solid rgba(224,188,114,.28);
+  background: rgba(22,24,29,.88);
+  color: #f2efe9;
+  box-shadow: 0 8px 22px rgba(0,0,0,.30);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.has-message .message-badge {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+.has-message[data-message-type="success"] .message-badge {
+  color: #f3cc7b;
+  border-color: rgba(240,198,116,.48);
+  background: rgba(48,39,20,.92);
+}
+.has-message[data-message-type="info"] .message-badge {
+  color: #9fcfb0;
+  border-color: rgba(143,190,160,.42);
+  background: rgba(22,42,31,.92);
+}
+.has-message[data-message-type="warning"] .message-badge,
+.has-message[data-message-type="error"] .message-badge {
+  color: #f1a28f;
+  border-color: rgba(241,162,143,.45);
+  background: rgba(55,26,23,.92);
+}
 .motion-track {
   display: none;
   position: absolute;
@@ -296,6 +341,22 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
 .collapsed .current-tag-label,
 .collapsed .pause-delta,
 .collapsed .task-hint { display: none !important; }
+.collapsed .message-badge {
+  left: 8px;
+  right: 8px;
+  top: 50%;
+  bottom: auto;
+  height: 30px;
+  line-height: 30px;
+  transform: translateY(-50%) scale(.98);
+  font-size: 13px;
+}
+.collapsed.has-message .message-badge {
+  transform: translateY(-50%) scale(1);
+}
+.collapsed.has-message .motion-track {
+  opacity: 0;
+}
 .collapsed .motion-track {
   display: block;
   z-index: 1;
@@ -307,7 +368,9 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
   opacity: .92;
   transform: none;
 }
+.collapsed.has-message .recorder::before { opacity: .9; animation: none; }
 .collapsed.is-idle .recorder::before { opacity: 0; }
+.collapsed.is-idle.has-message .recorder::before { opacity: .72; }
 .collapsed.is-idle .motion-track::before { background: rgba(255,255,255,.10); }
 .collapsed.is-idle .motion-dot {
   opacity: .42;

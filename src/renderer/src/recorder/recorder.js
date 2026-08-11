@@ -26,6 +26,7 @@ app.innerHTML = `
         </div>
       </div>
       <div id="taskHint" class="task-hint no-drag">选择标签后开始记录</div>
+      <div id="messageBadge" class="message-badge no-drag" aria-live="polite"></div>
       <div class="motion-track" aria-hidden="true">
         <span class="motion-dot"></span>
         <span class="motion-mark"></span>
@@ -41,6 +42,8 @@ let paused = false
 let menuOpen = false
 let collapsed = false
 let idleTimer = null
+let messageTimer = null
+let activeMessage = null
 const IDLE_COLLAPSE_MS = 5000
 
 function pad(n) { return String(n).padStart(2, '0') }
@@ -138,6 +141,30 @@ function setCollapsed(next, syncWindow = true) {
   if (!collapsed) resetIdleTimer()
 }
 
+function showMessage(payload = {}) {
+  const text = String(payload.text || '').trim()
+  if (!text) return
+  const type = payload.type || 'info'
+  const duration = Number(payload.duration || 2000)
+  activeMessage = { text, type }
+  const shell = document.querySelector('.recorder-shell')
+  const badge = document.getElementById('messageBadge')
+  shell.classList.add('has-message')
+  shell.dataset.messageType = type
+  badge.textContent = text
+  badge.title = text
+  if (collapsed) api('recorder:setMessageMode', { active: true }).catch(() => {})
+  clearTimeout(messageTimer)
+  messageTimer = setTimeout(() => {
+    activeMessage = null
+    shell.classList.remove('has-message')
+    delete shell.dataset.messageType
+    badge.textContent = ''
+    badge.title = ''
+    if (collapsed) api('recorder:setMessageMode', { active: false }).catch(() => {})
+  }, duration)
+}
+
 function resetIdleTimer() {
   clearTimeout(idleTimer)
   if (menuOpen) return
@@ -178,6 +205,10 @@ function render() {
   renderTagButton()
   renderCurrentTagLabel()
   renderStateClass()
+  if (activeMessage) {
+    const badge = document.getElementById('messageBadge')
+    badge.textContent = activeMessage.text
+  }
   if (current) {
     const end = current.paused ? current.paused_at : Date.now()
     timer.textContent = hms((end - current.start_time) / 1000)
@@ -257,7 +288,18 @@ document.addEventListener('click', (e) => {
   if (!document.getElementById('tagDropdown').contains(e.target)) setMenu(false)
 })
 
-on('ledger:state-changed', refresh)
+on('ledger:state-changed', (data) => {
+  const wasPaused = !!current?.paused
+  refresh()
+  if (data?.state === 'recording') showMessage({ type: 'success', text: wasPaused ? '继续记录' : '开始记录', duration: 1600 })
+  else if (data?.state === 'paused') showMessage({ type: 'info', text: '已暂停', duration: 1600 })
+  else if (data?.state === 'completed') showMessage({ type: 'success', text: '已存档', duration: 1800 })
+})
+on('capture:done', () => showMessage({ type: 'success', text: '截图已保存', duration: 2000 }))
+on('todo:changed', (data) => {
+  if (data?.type === 'created') showMessage({ type: 'info', text: '待办 +1', duration: 1800 })
+})
+on('recorder:message', showMessage)
 on('recorder:expand', () => setCollapsed(false, false))
 
 Promise.resolve()

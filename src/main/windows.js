@@ -11,6 +11,7 @@ let reminderWin = null
 const RECORDER_WIDTH = 380
 const RECORDER_HEIGHT = 260
 const RECORDER_COLLAPSED_WIDTH = 92
+const RECORDER_MESSAGE_WIDTH = 220
 const RECORDER_COLLAPSED_HEIGHT = 54
 const DIST_URL = () => `http://127.0.0.1:${require('./services/settings').get('server.port')}`
 
@@ -155,6 +156,25 @@ function setRecorderCollapsed(collapsed) {
   return { ok: true, collapsed, width, height }
 }
 
+function setRecorderMessageMode(active) {
+  if (!recorderWin || recorderWin.isDestroyed()) return { ok: false, error: '记录器未创建' }
+  const b = recorderWin.getBounds()
+  const right = b.x + b.width
+  const bottom = b.y + b.height
+  const width = active ? RECORDER_MESSAGE_WIDTH : RECORDER_COLLAPSED_WIDTH
+  const height = RECORDER_COLLAPSED_HEIGHT
+  recorderWin.setBounds({ x: right - width, y: bottom - height, width, height })
+  applyRecorderShape(true, width, height)
+  return { ok: true, active: !!active, width, height }
+}
+
+function showRecorderMessage(payload = {}) {
+  if (!recorderWin || recorderWin.isDestroyed()) createRecorder()
+  if (!recorderWin || recorderWin.isDestroyed()) return { ok: false, error: '记录器未创建' }
+  recorderWin.webContents.send(EVENTS.RECORDER_MESSAGE, payload)
+  return { ok: true }
+}
+
 function setRecorderPos(x, y) {
   if (!recorderWin || recorderWin.isDestroyed()) return { ok: false, error: '记录器未创建' }
   const { workArea } = screen.getPrimaryDisplay()
@@ -231,6 +251,8 @@ module.exports = {
   setRecorderPos,
   setRecorderMenuOpen,
   setRecorderCollapsed,
+  setRecorderMessageMode,
+  showRecorderMessage,
   // 兼容旧名字，避免外围调用崩
   getMini,
   hideMiniToTray,
