@@ -49,6 +49,7 @@ if (!gotLock) {
     server = sv
     if (actualPort !== settings.get('server.port')) settings.set('server.port', actualPort)
     refreshLanUrls(settings)
+    require('./services/mcpConfig').ensureRuntimeFiles()
 
     // 6. 托盘 + 独立记录器（是否自动显示由设置控制）
     const actions = buildActions()

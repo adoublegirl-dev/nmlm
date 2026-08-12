@@ -139,6 +139,7 @@ function registerAll() {
     shell.openExternal(`http://127.0.0.1:${s.server.port}`)
     return { ok: true }
   })
+  registerHandler(IPC.SERVER_MCP_CONFIG, () => require('./services/mcpConfig').getMcpConfig())
 
   // app
   registerHandler(IPC.APP_OPEN_SCREENSHOTS_DIR, () => evidence.openScreenshotsDir())

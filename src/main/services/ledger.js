@@ -198,7 +198,6 @@ function applyPausePointPlan({ entryId, points = [], baseTagId, detail } = {}) {
   }
 
   const wantsSplit = points.some((p) => Number(p.tagId) !== Number(finalBaseTagId))
-  if (wantsSplit && !entry.end_time) return { ok: false, error: '进行中的记录暂不支持拆分' }
 
   const tx = getDb().transaction(() => {
     for (const p of points) pausePointsRepo.update(p.id, { tagId: p.tagId, detail: p.detail || null })
@@ -208,27 +207,31 @@ function applyPausePointPlan({ entryId, points = [], baseTagId, detail } = {}) {
     }
 
     const latestEntry = entriesRepo.get(entry.id)
+    const splitEnd = latestEntry.end_time || Date.now()
+    const isOngoingSplit = !latestEntry.end_time
     const latestPoints = pausePointsRepo
       .listByEntry(entry.id)
-      .filter((p) => p.ts > latestEntry.start_time && p.ts < latestEntry.end_time)
+      .filter((p) => p.ts > latestEntry.start_time && p.ts < splitEnd)
       .sort((a, b) => a.ts - b.ts)
 
     const rawSegments = []
     let cursor = latestEntry.start_time
     let currentTag = finalBaseTagId
     for (const p of latestPoints) {
-      if (p.ts > cursor) rawSegments.push({ start: cursor, end: p.ts, tagId: currentTag })
+      if (p.ts > cursor) rawSegments.push({ start: cursor, end: p.ts, tagId: currentTag, ongoing: false })
       cursor = p.ts
       currentTag = p.tag_id == null ? finalBaseTagId : p.tag_id
     }
-    if (latestEntry.end_time > cursor) rawSegments.push({ start: cursor, end: latestEntry.end_time, tagId: currentTag })
+    if (splitEnd > cursor) rawSegments.push({ start: cursor, end: splitEnd, tagId: currentTag, ongoing: isOngoingSplit })
 
     const merged = []
     for (const s of rawSegments) {
       if (s.end <= s.start) continue
       const last = merged[merged.length - 1]
-      if (last && last.tagId === s.tagId) last.end = s.end
-      else merged.push({ ...s })
+      if (last && last.tagId === s.tagId) {
+        last.end = s.end
+        last.ongoing = !!s.ongoing
+      } else merged.push({ ...s })
     }
     if (!merged.length) return { entries: [latestEntry], split: false }
 
@@ -237,6 +240,19 @@ function applyPausePointPlan({ entryId, points = [], baseTagId, detail } = {}) {
     const writeSegment = (baseId, s) => {
       const durationSec = Math.max(0, Math.floor((s.end - s.start) / 1000))
       const isFragment = durationSec < FRAGMENT_THRESHOLD_SEC ? 1 : 0
+      if (s.ongoing) {
+        if (baseId) {
+          getDb().prepare('UPDATE time_entries SET start_time = ?, tag_id = ?, detail = ?, window_title = ? WHERE id = ?')
+            .run(s.start, s.tagId, finalDetail, latestEntry.window_title, baseId)
+          return entriesRepo.get(baseId)
+        }
+        return entriesRepo.insert({
+          startTime: s.start,
+          tagId: s.tagId,
+          detail: finalDetail,
+          windowTitle: latestEntry.window_title
+        })
+      }
       if (baseId) {
         return entriesRepo.finish(baseId, {
           endTime: s.end,
@@ -263,6 +279,7 @@ function applyPausePointPlan({ entryId, points = [], baseTagId, detail } = {}) {
     getDb().prepare('UPDATE time_entries SET start_time = ? WHERE id = ?').run(first.start, latestEntry.id)
     created.push(writeSegment(latestEntry.id, first))
     for (const s of merged.slice(1)) created.push(writeSegment(null, s))
+    if (isOngoingSplit && pausedSession && pausedSession.entryId === latestEntry.id) pausedSession = null
     return { entries: created, split: created.length > 1 }
   })
 

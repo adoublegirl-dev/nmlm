@@ -55,6 +55,7 @@ const IPC = {
   // server
   SERVER_INFO: 'server:info',
   SERVER_OPEN_BROWSER: 'server:openBrowser',
+  SERVER_MCP_CONFIG: 'server:mcpConfig',
   // app
   APP_OPEN_SCREENSHOTS_DIR: 'app:openScreenshotsDir',
   APP_QUIT: 'app:quit',

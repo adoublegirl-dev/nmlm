@@ -30,6 +30,28 @@
     </div>
 
     <div class="card section">
+      <h3>Agent MCP 接入</h3>
+      <div class="row">
+        <span class="muted">用途</span>
+        <span>复制下面配置给 Agent，可通过 Agent 创建、查询、更新牛马联盟待办。</span>
+      </div>
+      <div class="row">
+        <span class="muted">API</span>
+        <code>{{ mcp.api || '…' }}</code>
+      </div>
+      <div class="row">
+        <span class="muted">启动脚本</span>
+        <code>{{ mcp.scriptPath || '…' }}</code>
+      </div>
+      <textarea class="input mcp-config" readonly :value="mcp.configJson || ''" rows="12"></textarea>
+      <div class="mcp-actions">
+        <button class="btn primary" @click="copyMcpConfig">复制 MCP 配置</button>
+        <button class="btn" @click="loadMcpConfig">刷新配置</button>
+      </div>
+      <div class="muted hint">配置由当前安装位置动态生成，兼容中文路径；桌面端需要保持运行。</div>
+    </div>
+
+    <div class="card section">
       <h3>快捷键</h3>
       <div v-for="(acc, name) in shortcuts" :key="name" class="row">
         <span>{{ labelOf(name) }}</span>
@@ -139,6 +161,7 @@ const reminder = ref({})
 const evidence = ref({})
 const model = ref({})
 const recorder = ref({})
+const mcp = ref({})
 const tags = ref([])
 const newTag = ref({ name: '', color: '#e0bc72', key: null, isBreak: false })
 const recordingKey = ref(null)
@@ -170,6 +193,7 @@ async function load() {
   userData.value = info.userData || ''
   const tagRes = await api('tags:list')
   tags.value = tagRes.tags || []
+  await loadMcpConfig()
 }
 
 async function setReminder(key, val) {
@@ -232,6 +256,28 @@ function openBrowser() {
 function openScreenshotsDir() {
   api('app:openScreenshotsDir')
 }
+
+async function loadMcpConfig() {
+  const r = await api('server:mcpConfig')
+  if (r.ok) mcp.value = r
+}
+
+async function copyMcpConfig() {
+  if (!mcp.value.configJson) await loadMcpConfig()
+  try {
+    await navigator.clipboard.writeText(mcp.value.configJson || '')
+    alert('MCP 配置已复制')
+  } catch (_) {
+    const ta = document.createElement('textarea')
+    ta.value = mcp.value.configJson || ''
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+    alert('MCP 配置已复制')
+  }
+}
+
 function recordKey(name) {
   recordingName.value = name
   recordingKey.value = true
@@ -295,4 +341,13 @@ select.input { width: 130px; }
 .add-tag { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
 .add-tag .input:first-child { flex: 1; min-width: 120px; }
 .hint { font-size: 12px; margin-top: 8px; }
+.mcp-config {
+  width: 100%;
+  min-height: 220px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.mcp-actions { display: flex; gap: 8px; margin-top: 10px; }
 </style>

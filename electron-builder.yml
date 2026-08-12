@@ -5,6 +5,7 @@ directories:
 files:
   - dist/**
   - src/main/**
+  - src/mcp/**
   - src/preload/**
   - src/shared/**
   - package.json

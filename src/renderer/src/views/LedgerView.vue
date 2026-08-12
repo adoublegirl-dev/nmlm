@@ -158,6 +158,7 @@ import { api, on } from '../api'
 import { formatDuration, formatTime, formatDate, dayLabel } from '../utils/format'
 
 const DAY_MS = 86400000
+const WORK_START_HOUR = 8
 const curDate = ref(Date.now())
 const segments = ref([])
 const recording = ref(false)
@@ -257,18 +258,18 @@ const timelineNodes = computed(() => {
 
 function goToday() {
   curDate.value = Date.now()
-  load()
+  load({ focusWorkStart: true })
 }
 function goYesterday() {
   curDate.value = startOfDay(Date.now()) - DAY_MS
-  load()
+  load({ focusWorkStart: true })
 }
 function setDateFromInput(v) {
   if (!v) return
   const ts = new Date(v + 'T00:00:00').getTime()
   const today = startOfDay(Date.now())
   curDate.value = Math.min(ts, today)
-  load()
+  load({ focusWorkStart: true })
 }
 function clampZoom(v) {
   return Math.max(1, Math.min(64, v))
@@ -341,7 +342,7 @@ function toDateInput(ts) {
   return `${y}-${m}-${day}`
 }
 
-async function load() {
+async function load({ focusWorkStart = false } = {}) {
   try {
     const start = startOfDay(curDate.value)
     const end = start + DAY_MS
@@ -383,6 +384,7 @@ async function load() {
     fragments.value = raw.filter((e) => e.is_fragment).length
     const cur = await api('ledger:current')
     recording.value = !!cur.entry
+    if (focusWorkStart) await nextTick(scrollTimelineToWorkStart)
   } catch (e) {
     /* 静默 */
   }
@@ -450,6 +452,15 @@ function decorateEntryTimeline(entry, tagMap) {
   entry.trackTitle = `${entry.startText} – ${entry.endText} · ${entry.durText}`
 }
 
+function scrollTimelineToWorkStart() {
+  const el = timelineScroll.value
+  if (!el) return
+  const hourRatio = WORK_START_HOUR / 24
+  const target = el.scrollWidth * hourRatio
+  const max = Math.max(0, el.scrollWidth - el.clientWidth)
+  el.scrollLeft = Math.max(0, Math.min(max, target))
+}
+
 function clampPct(n) {
   return Math.max(0, Math.min(100, Number.isFinite(n) ? n : 0))
 }
@@ -513,11 +524,12 @@ async function saveEdit() {
   if (!editEntry.value) return
   const detail = editForm.value.detail.trim() || null
   if (!editForm.value.pausePoints.length) {
-    await api('ledger:retag', {
+    const r = await api('ledger:retag', {
       id: editEntry.value.id,
       tagId: editForm.value.tagId,
       detail
     })
+    if (!r.ok) return alert(r.error || '保存失败')
   } else {
     const baseTag = editForm.value.tagId
     const willSplit = editForm.value.pausePoints.some((p) => Number(p.tagId) !== Number(baseTag))
@@ -531,6 +543,7 @@ async function saveEdit() {
       detail,
       points: editForm.value.pausePoints.map((p) => ({ id: p.id, tagId: p.tagId, detail: p.detail?.trim() || null }))
     })
+    if (!r.ok) return alert(r.error || '保存失败')
     if (r.split) alert('已按时间节点拆分并刷新台账')
   }
   expandedEntryId.value = null
@@ -540,7 +553,7 @@ async function saveEdit() {
 
 let off = null
 onMounted(() => {
-  load()
+  load({ focusWorkStart: true })
   off = on('ledger:state-changed', () => load())
 })
 onBeforeUnmount(() => {

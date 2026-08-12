@@ -207,6 +207,27 @@ describe('ledger 状态机', () => {
     expect(points.length).toBe(1)
     expect(points[0].detail).toBe('接了个电话')
   })
+
+  it('进行中记录可按暂停点拆分，最后一段保持进行中', () => {
+    const base = 1786300000000
+    vi.useFakeTimers()
+    vi.setSystemTime(base + 30 * 60 * 1000)
+    const entry = entriesRepo.insert({ startTime: base, tagId: 1 })
+    const p1 = pausePointsRepo.insert({ entryId: entry.id, ts: base + 10 * 60 * 1000 })
+    const r = ledger.applyPausePointPlan({ entryId: entry.id, baseTagId: 1, points: [{ id: p1.id, tagId: 2, detail: '切到开会' }] })
+    expect(r.ok).toBe(true)
+    expect(r.split).toBe(true)
+    const rows = entriesRepo.listByRange(base - 1, base + 31 * 60 * 1000)
+    expect(rows.length).toBe(2)
+    expect(rows[0].tag_id).toBe(1)
+    expect(rows[0].start_time).toBe(base)
+    expect(rows[0].end_time).toBe(base + 10 * 60 * 1000)
+    expect(rows[1].tag_id).toBe(2)
+    expect(rows[1].start_time).toBe(base + 10 * 60 * 1000)
+    expect(rows[1].end_time).toBeNull()
+    expect(ledger.current().id).toBe(rows[1].id)
+    expect(pausePointsRepo.listByEntry(entry.id).length).toBe(0)
+  })
 })
 
 describe('todos 服务', () => {
