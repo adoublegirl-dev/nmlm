@@ -384,7 +384,7 @@ async function load({ focusWorkStart = false } = {}) {
     fragments.value = raw.filter((e) => e.is_fragment).length
     const cur = await api('ledger:current')
     recording.value = !!cur.entry
-    if (focusWorkStart) await nextTick(scrollTimelineToWorkStart)
+    if (focusWorkStart) requestWorkStartFocus()
   } catch (e) {
     /* 静默 */
   }
@@ -456,9 +456,17 @@ function scrollTimelineToWorkStart() {
   const el = timelineScroll.value
   if (!el) return
   const hourRatio = WORK_START_HOUR / 24
-  const target = el.scrollWidth * hourRatio
+  const target = el.scrollWidth * hourRatio - 12
   const max = Math.max(0, el.scrollWidth - el.clientWidth)
   el.scrollLeft = Math.max(0, Math.min(max, target))
+}
+function requestWorkStartFocus() {
+  nextTick(() => {
+    scrollTimelineToWorkStart()
+    window.requestAnimationFrame(() => scrollTimelineToWorkStart())
+    setTimeout(scrollTimelineToWorkStart, 80)
+    setTimeout(scrollTimelineToWorkStart, 220)
+  })
 }
 
 function clampPct(n) {
