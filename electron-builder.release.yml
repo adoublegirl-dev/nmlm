@@ -1,0 +1,47 @@
+appId: com.niuma.union
+productName: 牛马联盟
+artifactName: 牛马联盟-Setup-${version}.${ext}
+directories:
+  output: ../牛马联盟-发行工作区/output
+  buildResources: ../牛马联盟-发行工作区/resources
+files:
+  - dist/**
+  - src/main/**
+  - src/mcp/**
+  - src/preload/**
+  - src/shared/**
+  - package.json
+  - "!**/*.log"
+  - "!**/*.db"
+  - "!**/*.sqlite*"
+  - "!**/screenshots/**"
+  - "!**/牛马联盟证据库/**"
+  - "!**/.hanako-backups/**"
+  - "!plan/**"
+  - "!tests/**"
+asar: true
+asarUnpack:
+  - node_modules/better-sqlite3/**
+win:
+  icon: ../牛马联盟-发行工作区/resources/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: 牛马联盟
+  installerIcon: ../牛马联盟-发行工作区/resources/icon.ico
+  uninstallerIcon: ../牛马联盟-发行工作区/resources/icon.ico
+  installerHeaderIcon: ../牛马联盟-发行工作区/resources/icon.ico
+  include: ../牛马联盟-发行工作区/resources/installer.nsh
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  displayLanguageSelector: false
+  language: 2052
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/

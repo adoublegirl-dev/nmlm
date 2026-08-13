@@ -18,6 +18,7 @@ const RECORDER_COLLAPSED_WIDTH = 92
 const RECORDER_MESSAGE_WIDTH = RECORDER_COLLAPSED_WIDTH
 const RECORDER_COLLAPSED_HEIGHT = 54
 const DIST_URL = () => `http://127.0.0.1:${require('./services/settings').get('server.port')}`
+const APP_ICON = path.join(__dirname, 'assets/icon.ico')
 
 function loadRenderer(win, file) {
   win.loadURL(`${DIST_URL()}/${file}`)
@@ -69,6 +70,7 @@ function createRecorder() {
     maximizable: false,
     fullscreenable: false,
     hasShadow: false,
+    icon: APP_ICON,
     focusable: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
@@ -231,6 +233,7 @@ function createTagPicker(entryId) {
     skipTaskbar: true,
     resizable: false,
     hasShadow: true,
+    icon: APP_ICON,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -258,6 +261,7 @@ function createReminder(payload) {
     skipTaskbar: true,
     resizable: false,
     hasShadow: true,
+    icon: APP_ICON,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,

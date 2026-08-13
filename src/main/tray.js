@@ -10,15 +10,15 @@ function iconPath(state) {
   return null
 }
 
-function createIcon(state) {
-  const color = state === 'recording' ? '#D4AF6A' : '#8F867B'
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-  <circle cx="16" cy="16" r="9" fill="${color}"/>
-  <circle cx="16" cy="16" r="3.5" fill="#14161A"/>
-</svg>`
-  const img = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`)
-  img.setTemplateImage(false)
-  return img
+function createIcon() {
+  const iconFile = path.join(__dirname, 'assets/icon.ico')
+  const img = nativeImage.createFromPath(iconFile)
+  if (!img.isEmpty()) {
+    img.setTemplateImage(false)
+    return img.resize({ width: 32, height: 32, quality: 'best' })
+  }
+  const fallback = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="10" fill="#D4AF6A"/></svg>`
+  return nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(fallback).toString('base64')}`)
 }
 
 function buildMenu(actions) {

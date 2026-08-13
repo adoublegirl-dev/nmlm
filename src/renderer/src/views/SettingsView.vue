@@ -1,6 +1,9 @@
 <template>
   <div class="settings">
-    <h2>设置</h2>
+    <div class="settings-head">
+      <h2>设置</h2>
+      <button class="btn" @click="$emit('open-setup')">重新打开首次设置向导</button>
+    </div>
 
     <div class="card section">
       <h3>面板地址</h3>
@@ -57,6 +60,7 @@
         <span>{{ labelOf(name) }}</span>
         <code>{{ acc || '未启用' }}</code>
         <button class="btn mini" @click="recordKey(name)">录制</button>
+        <button class="btn mini" @click="clearShortcut(name)">清空</button>
       </div>
       <div v-if="recordingKey" class="record-hint muted">按下新的组合键…（Esc 取消）</div>
     </div>
@@ -123,7 +127,14 @@
         <input type="checkbox" :checked="evidence.watermark" @change="setEvidence('watermark', $event.target.checked)" />
         <span class="muted">只作用于未来导出的副本，绝不修改 raw 原件。</span>
       </div>
-      <button class="btn" @click="openScreenshotsDir">打开证据库目录</button>
+      <div class="row">
+        <span class="muted">自定义根目录</span>
+        <code>{{ evidence.dir || '默认用户数据目录' }}</code>
+      </div>
+      <div class="mcp-actions">
+        <button class="btn" @click="openScreenshotsDir">打开证据库目录</button>
+        <button class="btn primary" @click="migrateEvidenceDir">迁移证据库位置</button>
+      </div>
     </div>
 
     <div class="card section">
@@ -157,6 +168,8 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+
+defineEmits(['open-setup'])
 import { api } from '../api'
 
 const urls = ref({})
@@ -262,6 +275,20 @@ function openBrowser() {
 function openScreenshotsDir() {
   api('app:openScreenshotsDir')
 }
+async function migrateEvidenceDir() {
+  try {
+    const r = await api('evidence:migrateDir')
+    if (r.canceled) return
+    if (r.skipped) {
+      alert('新旧证据库位置相同，无需迁移')
+      return
+    }
+    await load()
+    alert(`证据库迁移完成：${r.count || 0} 个文件。旧目录已保留。`)
+  } catch (e) {
+    alert(`迁移失败：${e.message}`)
+  }
+}
 
 async function loadMcpConfig() {
   const r = await api('server:mcpConfig')
@@ -303,8 +330,10 @@ function onKeyDown(e) {
   if (e.altKey) mods.push('Alt')
   if (e.metaKey) mods.push('Meta')
   const key = e.key.length === 1 ? e.key.toUpperCase() : e.key
+  if (['Control', 'Shift', 'Alt', 'Meta'].includes(key)) return
+  const isFunctionKey = /^F([1-9]|1[0-9]|2[0-4])$/.test(key)
+  if (mods.length === 0 && !isFunctionKey) return
   const combo = [...mods, key].join('+')
-  if (mods.length === 0) return
   if (/(Shift|Alt)\+[0-9]$/.test(combo)) {
     alert('数字组合在 Windows 全局快捷键里容易撞系统/显卡/桌面热键，建议用 F8/F9/F10 这类功能键。')
     return
@@ -312,15 +341,25 @@ function onKeyDown(e) {
   finishRecord(combo)
 }
 
+async function applyShortcut(name, combo) {
+  try {
+    await api('settings:set', { key: `shortcuts.${name}`, value: combo || '' })
+    shortcuts.value[name] = combo || ''
+    alert(combo ? `快捷键已更新：${combo}` : '快捷键已清空')
+  } catch (e) {
+    alert(`快捷键设置失败：${e.message}`)
+  }
+}
+function clearShortcut(name) {
+  if (!confirm(`清空「${labelOf(name)}」快捷键？`)) return
+  applyShortcut(name, '')
+}
 function finishRecord(combo) {
   window.removeEventListener('keydown', onKeyDown, true)
   recordingKey.value = false
-  if (combo) {
-    api('settings:set', { key: `shortcuts.${recordingName.value}`, value: combo }).then(() => {
-      shortcuts.value[recordingName.value] = combo
-    })
-  }
+  const name = recordingName.value
   recordingName.value = ''
+  if (combo) applyShortcut(name, combo)
 }
 
 onMounted(() => {
@@ -329,7 +368,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
-h2 { font-size: 18px; font-weight: 500; margin-bottom: 16px; }
+h2 { font-size: 18px; font-weight: 500; }
+.settings-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
 .section { margin-bottom: 16px; }
 .section h3 { font-size: 14px; font-weight: 500; margin-bottom: 12px; color: var(--gold); }
 .row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; font-size: 13px; }

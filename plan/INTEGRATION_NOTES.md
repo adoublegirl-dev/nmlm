@@ -81,6 +81,7 @@ npm run dev                 # 构建后启动 electron
 
 ## 八、更新记录
 
+- 2026-08-13（证据 P1.5 + 发行准备）：证据工作台新增绝对路径与打开所在文件夹、隐藏页面即时截图入口、日历选日、状态/类型/台账关联筛选、标签与台账关联编辑；材料导入改为先选归档日期，前后端禁止未来日期；新增证据库迁移（复制、size/sha256 校验、切配置、保留旧目录）和单日/多日 Markdown 证据链导出（原始副本、打包清单、未处理材料说明）。设置页快捷键支持录制/清空/热重载，检测内部重复和系统占用，失败回滚；支持 F1-F24 单键。新增首次设置向导，可设置证据库、记录器和提醒，支持跳过/重开。Windows 发行使用独立 `牛马联盟-发行工作区`，assisted NSIS 可选安装目录；融合牛头/马头图标已接入。ASAR 扫描确认无 db/sqlite/screenshots/证据库/log，win-unpacked 冒烟正常。exe、blockmap、win-unpacked 不进入 Git。
 - 2026-08-13（台账收口 + 证据 P1）：台账模块完成 P1/P2 后暂停 P3：支持跨天虚拟裁剪、事后校准、补记、事后切分、剪辑台拖拽/磁吸/秒级调整；同标签相邻片段自动归并，同标签暂停点可确认清理并把节点文字追加进片段备注。证据模块进入 P1：新增 evidence_items/evidence_metadata/evidence_reviews；截图进入“牛马联盟证据库/captures/YYYY/MM/DD/raw”，临时文件 rename、sha256、meta JSON，raw 原件不加水印不覆盖；F10 默认截鼠标所在显示器并记录 cursor/display 元数据；支持手动导入材料到 files/YYYY/MM/DD/raw；证据工作台支持列表、预览、基础元数据和人工复核。执行状态见 plan/PROJECT_TODO.md。
 - 2026-08-05：P0 完成。坑点 1-8 记录。设计文档 DESIGN.md v0.2。
 - 2026-08-05（补丁）：迷你栏提亮（高对比边框/实背景/投影，解决浅色壁纸下看不见）；实现拖拽（mousedown/mousemove 区分点击与拖动，IPC mini:setPos 带屏幕边界 clamp）；面板主题提亮一档（--bg-deep #1a1d23）。

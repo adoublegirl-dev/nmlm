@@ -20,7 +20,8 @@
     "mcp": "node src/mcp/server.mjs",
     "mcp:utf8": "powershell -ExecutionPolicy Bypass -NoProfile -File ./scripts/mcp.ps1",
     "junction": "powershell -ExecutionPolicy Bypass -NoProfile -File ./scripts/create-junction.ps1",
-    "dist": "npm run build:renderer && electron-builder"
+    "dist": "npm run build:renderer && electron-builder",
+    "dist:release": "powershell -ExecutionPolicy Bypass -NoProfile -File ./scripts/release.ps1"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

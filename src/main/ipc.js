@@ -93,6 +93,10 @@ function registerAll() {
   registerHandler(IPC.EVIDENCE_IMPORT, (a) => evidence.importWithDialog(a))
   registerHandler(IPC.EVIDENCE_UPDATE, (a) => evidence.updateEvidence(a))
   registerHandler(IPC.EVIDENCE_LIST, (a) => ({ ok: true, screenshots: evidence.listByRange(a.start, a.end) }))
+  registerHandler(IPC.EVIDENCE_OPEN_FOLDER, (a) => evidence.openEvidenceFolder(a))
+  registerHandler(IPC.EVIDENCE_DELETE, (a) => evidence.removeEvidence(a))
+  registerHandler(IPC.EVIDENCE_MIGRATE_DIR, (a) => evidence.migrateLibraryWithDialog(a))
+  registerHandler(IPC.EVIDENCE_EXPORT_MARKDOWN, (a) => evidence.exportMarkdown(a))
   registerHandler(IPC.EVIDENCE_PACK, (a) => evidence.pack(a))
   registerHandler(IPC.EVIDENCE_PACK_STATUS, () => ({ ok: true, ...evidence.packStatus() }))
 
@@ -125,6 +129,10 @@ function registerAll() {
   // settings
   registerHandler(IPC.SETTINGS_GET_ALL, () => ({ ok: true, settings: settings.getAll() }))
   registerHandler(IPC.SETTINGS_SET, (a) => {
+    if (String(a.key || '').startsWith('shortcuts.')) {
+      const name = String(a.key).slice('shortcuts.'.length)
+      return shortcut.updateShortcut(name, a.value)
+    }
     const value = settings.set(a.key, a.value)
     if (a.key === 'recorder.enabled' || a.key === 'mini.enabled') {
       if (value) windows.showRecorder()

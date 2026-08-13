@@ -50,6 +50,9 @@ if (!gotLock) {
     if (actualPort !== settings.get('server.port')) settings.set('server.port', actualPort)
     refreshLanUrls(settings)
     require('./services/mcpConfig').ensureRuntimeFiles()
+    if (settings.get('onboarding.completed') !== true) {
+      shell.openExternal(`http://127.0.0.1:${actualPort}/panel.html#settings`)
+    }
 
     // 6. 托盘 + 独立记录器（是否自动显示由设置控制）
     const actions = buildActions()

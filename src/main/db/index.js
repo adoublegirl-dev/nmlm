@@ -321,6 +321,15 @@ const evidenceRepo = {
   listMetadata(evidenceId) {
     return getDb().prepare('SELECT * FROM evidence_metadata WHERE evidence_id = ? ORDER BY id').all(evidenceId)
   },
+  remove(id) {
+    const tx = getDb().transaction((evidenceId) => {
+      getDb().prepare('DELETE FROM evidence_metadata WHERE evidence_id = ?').run(evidenceId)
+      getDb().prepare('DELETE FROM evidence_reviews WHERE evidence_id = ?').run(evidenceId)
+      getDb().prepare('DELETE FROM evidence_items WHERE id = ?').run(evidenceId)
+    })
+    tx(id)
+    return { ok: true }
+  },
   upsertReview(evidenceId, patch = {}) {
     const now = Date.now()
     const existing = getDb().prepare('SELECT * FROM evidence_reviews WHERE evidence_id = ? ORDER BY updated_at DESC LIMIT 1').get(evidenceId)

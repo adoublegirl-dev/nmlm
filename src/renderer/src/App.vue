@@ -26,8 +26,9 @@
       <ReportView v-else-if="route === 'report'" />
       <ToolsView v-else-if="route === 'tools'" />
       <TodosView v-else-if="route === 'todos'" />
-      <SettingsView v-else-if="route === 'settings'" />
+      <SettingsView v-else-if="route === 'settings'" @open-setup="showSetup = true" />
     </main>
+    <SetupView v-if="showSetup" @done="showSetup = false" />
   </div>
 </template>
 
@@ -41,6 +42,7 @@ import ReportView from './views/ReportView.vue'
 import ToolsView from './views/ToolsView.vue'
 import TodosView from './views/TodosView.vue'
 import SettingsView from './views/SettingsView.vue'
+import SetupView from './views/SetupView.vue'
 import dayBackground from './assets/background-day-cattle-horses.png'
 import nightBackground from './assets/background-night-cattle-horses.png'
 
@@ -56,6 +58,7 @@ const navs = [
 const savedTheme = localStorage.getItem('nmlm.panelTheme')
 const pastureTheme = ref(savedTheme === 'night' ? 'night' : 'day')
 const route = ref(location.hash.replace('#', '') || 'ledger')
+const showSetup = ref(false)
 window.addEventListener('hashchange', () => {
   route.value = location.hash.replace('#', '') || 'ledger'
 })
@@ -91,15 +94,17 @@ function toggleTheme() {
 
 async function refresh() {
   try {
-    const [cur, eff, tagRes] = await Promise.all([
+    const [cur, eff, tagRes, settingRes] = await Promise.all([
       api('ledger:current'),
       api('report:effectiveHours', { date: Date.now() }),
-      api('tags:list')
+      api('tags:list'),
+      api('settings:getAll')
     ])
     currentEntry.value = cur.entry
     recording.value = !!cur.entry
     effectiveSec.value = eff.sec
     tags.value = tagRes.tags
+    if (settingRes.settings?.onboarding?.completed !== true) showSetup.value = true
   } catch (e) {
     /* 首屏静默 */
   }

@@ -29,6 +29,10 @@ const IPC = {
   EVIDENCE_IMPORT: 'evidence:import',
   EVIDENCE_UPDATE: 'evidence:update',
   EVIDENCE_LIST: 'evidence:list',
+  EVIDENCE_OPEN_FOLDER: 'evidence:openFolder',
+  EVIDENCE_DELETE: 'evidence:delete',
+  EVIDENCE_MIGRATE_DIR: 'evidence:migrateDir',
+  EVIDENCE_EXPORT_MARKDOWN: 'evidence:exportMarkdown',
   EVIDENCE_PACK: 'evidence:pack',
   EVIDENCE_PACK_STATUS: 'evidence:packStatus',
   // report
@@ -151,6 +155,10 @@ const DEFAULT_SETTINGS = {
   },
   activity: {
     pollIntervalSec: 30
+  },
+  onboarding: {
+    completed: false,
+    version: 1
   },
   tools: [
     { id: 'deepseek', name: 'DeepSeek', url: 'https://chat.deepseek.com', group: '效率' },

@@ -9,6 +9,8 @@ const winUtil = require('../utils/window')
 const { formatDate } = require('../utils/time')
 const settings = require('./settings')
 
+const DAY_MS = 86400000
+
 let emitter = null
 function attachEventSender(fn) {
   emitter = fn
@@ -82,6 +84,33 @@ function sha256(buffer) {
 }
 function sha256File(filePath) {
   return sha256(fs.readFileSync(filePath))
+}
+function walkFiles(dir) {
+  if (!fs.existsSync(dir)) return []
+  const out = []
+  for (const name of fs.readdirSync(dir)) {
+    const p = path.join(dir, name)
+    const st = fs.statSync(p)
+    if (st.isDirectory()) out.push(...walkFiles(p))
+    else if (st.isFile()) out.push(p)
+  }
+  return out
+}
+function copyDirVerified(from, to) {
+  fs.mkdirSync(to, { recursive: true })
+  const files = walkFiles(from)
+  for (const src of files) {
+    const rel = path.relative(from, src)
+    const dest = path.join(to, rel)
+    fs.mkdirSync(path.dirname(dest), { recursive: true })
+    fs.copyFileSync(src, dest)
+    const a = fs.statSync(src)
+    const b = fs.statSync(dest)
+    if (a.size !== b.size || sha256File(src) !== sha256File(dest)) {
+      throw new Error(`迁移校验失败：${rel}`)
+    }
+  }
+  return { count: files.length, bytes: files.reduce((sum, f) => sum + fs.statSync(f).size, 0) }
 }
 function detectFileType(filePath) {
   const ext = path.extname(filePath).toLowerCase()
@@ -250,7 +279,28 @@ function captureBuffer(buffer, { capturedAt = Date.now(), windowInfo = null, dis
   return { ok: true, screenshot, evidence: item, filePath: finalPath }
 }
 
-async function importWithDialog() {
+function resolveArchiveTime(value, fallback = Date.now()) {
+  if (value == null || value === '') return fallback
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  const parsed = new Date(value).getTime()
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+function startOfLocalDay(ts) {
+  const d = new Date(ts)
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+}
+function ensureNotFutureArchiveDate(ts) {
+  if (startOfLocalDay(ts) > startOfLocalDay(Date.now())) {
+    return { ok: false, error: '不能导入到未来日期的证据目录' }
+  }
+  return null
+}
+
+async function importWithDialog({ evidenceDate = null } = {}) {
+  const archiveAt = resolveArchiveTime(evidenceDate)
+  const dateError = ensureNotFutureArchiveDate(archiveAt)
+  if (dateError) return dateError
   const result = await dialog.showOpenDialog({
     title: '导入证据材料',
     properties: ['openFile', 'multiSelections'],
@@ -260,11 +310,14 @@ async function importWithDialog() {
     ]
   })
   if (result.canceled || !result.filePaths.length) return { ok: true, canceled: true, items: [] }
-  return importPaths(result.filePaths, { source: 'manual_upload' })
+  return importPaths(result.filePaths, { source: 'manual_upload', evidenceDate: archiveAt })
 }
 
-function importPaths(filePaths = [], { source = 'manual_upload' } = {}) {
-  const importedAt = Date.now()
+function importPaths(filePaths = [], { source = 'manual_upload', evidenceDate = null } = {}) {
+  const actualImportedAt = Date.now()
+  const importedAt = resolveArchiveTime(evidenceDate, actualImportedAt)
+  const dateError = ensureNotFutureArchiveDate(importedAt)
+  if (dateError) return dateError
   const dirs = fileDirs(importedAt)
   ensureLibraryDirs(importedAt)
   const items = []
@@ -310,6 +363,7 @@ function importPaths(filePaths = [], { source = 'manual_upload' } = {}) {
       evidence_id: evidenceId,
       import_source_path: sourcePath,
       imported_at: importedAt,
+      actual_imported_at: actualImportedAt,
       original_filename: path.basename(sourcePath),
       sha256: hash,
       size_bytes: stat.size,
@@ -354,6 +408,7 @@ function normalizeEvidenceItem(item, legacyShot = null) {
     size_bytes: item.size_bytes,
     mime_type: item.mime_type,
     title: item.title,
+    unsupported_reason: item.unsupported_reason,
     user_note: item.user_note,
     review_status: review?.review_status || null,
     confirmed_title: review?.confirmed_title || null,
@@ -417,6 +472,154 @@ function packStatus() {
   return { running: false }
 }
 
+function safeUnlink(filePath) {
+  if (!filePath) return false
+  try {
+    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+      fs.unlinkSync(filePath)
+      return true
+    }
+  } catch (e) {
+    return false
+  }
+  return false
+}
+
+function removeEmptyParents(dir, stopDir) {
+  let cur = dir
+  const stop = path.resolve(stopDir)
+  while (cur && path.resolve(cur).startsWith(stop) && path.resolve(cur) !== stop) {
+    try {
+      if (!fs.existsSync(cur) || fs.readdirSync(cur).length) break
+      fs.rmdirSync(cur)
+      cur = path.dirname(cur)
+    } catch (e) {
+      break
+    }
+  }
+}
+
+function removeEvidence({ id } = {}) {
+  if (!id) return { ok: false, error: '缺少证据 ID' }
+  const item = evidenceRepo.get(id)
+  if (!item) return { ok: false, error: '证据不存在' }
+  const removedFiles = []
+  if (safeUnlink(item.original_path)) removedFiles.push(item.original_path)
+  const archiveAt = item.captured_at || item.imported_at || item.created_at || Date.now()
+  const metaPath = item.type === 'screenshot' ? metaFilePath(id, archiveAt) : fileMetaPath(id, archiveAt)
+  if (safeUnlink(metaPath)) removedFiles.push(metaPath)
+  evidenceRepo.remove(id)
+  removeEmptyParents(path.dirname(item.original_path), evidenceLibraryDir())
+  removeEmptyParents(path.dirname(metaPath), evidenceLibraryDir())
+  emit('evidence:deleted', { ok: true, id, removedFiles })
+  return { ok: true, id, removedFiles }
+}
+
+function openEvidenceFolder({ id, filePath } = {}) {
+  let target = filePath
+  if (id) {
+    const item = evidenceRepo.get(id)
+    if (!item) return { ok: false, error: '证据不存在' }
+    target = item.original_path
+  }
+  if (!target) return { ok: false, error: '缺少文件路径' }
+  if (!fs.existsSync(target)) return { ok: false, error: '原始文件不存在' }
+  require('electron').shell.showItemInFolder(target)
+  return { ok: true }
+}
+
+async function migrateLibraryWithDialog() {
+  const currentLibrary = evidenceLibraryDir()
+  ensureLibraryDirs(Date.now())
+  const result = await dialog.showOpenDialog({
+    title: '选择新的证据库父目录',
+    properties: ['openDirectory', 'createDirectory']
+  })
+  if (result.canceled || !result.filePaths.length) return { ok: true, canceled: true }
+  const picked = result.filePaths[0]
+  const baseDir = path.basename(picked) === '牛马联盟证据库' ? path.dirname(picked) : picked
+  const targetLibrary = path.join(baseDir, '牛马联盟证据库')
+  if (path.resolve(currentLibrary) === path.resolve(targetLibrary)) return { ok: true, skipped: true, dir: targetLibrary }
+  const plan = { from: currentLibrary, to: targetLibrary }
+  const confirmed = await dialog.showMessageBox({
+    type: 'warning',
+    buttons: ['开始迁移', '取消'],
+    defaultId: 1,
+    cancelId: 1,
+    title: '确认迁移证据库？',
+    message: '确认迁移证据库位置？',
+    detail: `原路径：${currentLibrary}\n新路径：${targetLibrary}\n\n系统会复制并校验文件，成功后切换到新路径；旧目录不会自动删除。`
+  })
+  if (confirmed.response !== 0) return { ok: true, canceled: true }
+  const resultCopy = copyDirVerified(currentLibrary, targetLibrary)
+  settings.set('evidence.dir', baseDir)
+  ensureLibraryDirs(Date.now())
+  return { ok: true, ...plan, ...resultCopy, evidenceDir: baseDir }
+}
+
+function evidenceTime(item) {
+  return item.captured_at || item.imported_at || item.created_at || Date.now()
+}
+function dayText(ts) {
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function exportMarkdown({ start, end, title = '加班证据链', includeStatus = 'reviewed' } = {}) {
+  const from = Number(start)
+  const to = Number(end)
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return { ok: false, error: '导出日期范围不合法' }
+  const items = listByRange(from, to).filter((x) => {
+    if (includeStatus === 'all') return true
+    if (includeStatus === 'reviewed') return x.status === 'reviewed'
+    return ['reviewed', 'pending_review', 'captured', 'imported', 'unsupported'].includes(x.status)
+  })
+  const p = `${dayText(from)}${to - from > DAY_MS ? '_至_' + dayText(to - DAY_MS) : ''}_${sanitize(title, 24)}`
+  const outDir = uniquePath(path.join(evidenceLibraryDir(), 'exports'), p)
+  fs.mkdirSync(outDir, { recursive: true })
+  const rawDir = path.join(outDir, '原始材料')
+  fs.mkdirSync(rawDir, { recursive: true })
+  const unsupported = []
+  const lines = [`# ${title}`, '', `日期范围：${dayText(from)} 至 ${dayText(to - 1)}`, '', '## 证据清单', '']
+  if (!items.length) lines.push('本范围内没有符合条件的证据。')
+  for (const item of items) {
+    const day = dayText(evidenceTime(item))
+    const src = item.original_path
+    let copied = ''
+    if (src && fs.existsSync(src)) {
+      const dayDir = path.join(rawDir, day)
+      fs.mkdirSync(dayDir, { recursive: true })
+      copied = path.join(dayDir, path.basename(src))
+      fs.copyFileSync(src, copied)
+    }
+    if (['unsupported', 'audio', 'video', 'archive', 'unknown'].includes(item.status) || ['audio', 'video', 'archive', 'unknown'].includes(item.type)) unsupported.push(item)
+    lines.push(`### ${day} ${item.title || typeLabelForExport(item.type)}`)
+    lines.push('')
+    lines.push(`- 类型：${typeLabelForExport(item.type)}`)
+    lines.push(`- 状态：${item.status}`)
+    lines.push(`- 时间：${new Date(evidenceTime(item)).toLocaleString()}`)
+    lines.push(`- 原始路径：${src || ''}`)
+    lines.push(`- 导出副本：${copied ? path.relative(outDir, copied) : '未复制'}`)
+    lines.push(`- SHA256：${item.sha256 || ''}`)
+    if (item.user_note || item.review_note) lines.push(`- 备注：${item.user_note || item.review_note}`)
+    if (item.ledger_entry_id) lines.push(`- 关联台账：#${item.ledger_entry_id}`)
+    lines.push('')
+  }
+  lines.push('## 未处理材料说明', '')
+  if (!unsupported.length) lines.push('本次导出没有发现无法处理材料。')
+  for (const item of unsupported) {
+    lines.push(`- ${item.title || path.basename(item.original_path || '')}：${item.unsupported_reason || '当前版本暂不自动解析该类型材料。'}`)
+  }
+  lines.push('', '## 说明', '', '本报告由牛马联盟根据本地证据库生成。AI 分析能力尚未接入时，报告仅汇总原始材料、人工复核信息与文件校验信息。')
+  const mdPath = path.join(outDir, '证据链说明.md')
+  fs.writeFileSync(mdPath, lines.join('\n'), 'utf8')
+  fs.writeFileSync(path.join(outDir, '打包清单.json'), JSON.stringify({ title, start: from, end: to, count: items.length, generated_at: Date.now(), items }, null, 2), 'utf8')
+  return { ok: true, dir: outDir, markdownPath: mdPath, count: items.length }
+}
+function typeLabelForExport(type) {
+  const map = { screenshot: '截图', image: '图片', pdf: 'PDF', text: '文本', docx: 'DOCX', xlsx: 'XLSX', video: '视频', audio: '音频', archive: '压缩包', unknown: '未知' }
+  return map[type] || type || '文件'
+}
+
 function openScreenshotsDir() {
   const dir = evidenceLibraryDir()
   ensureLibraryDirs(Date.now())
@@ -431,9 +634,13 @@ module.exports = {
   importWithDialog,
   importPaths,
   updateEvidence,
+  removeEvidence,
   listByRange,
   pack,
   packStatus,
+  migrateLibraryWithDialog,
+  exportMarkdown,
+  openEvidenceFolder,
   openScreenshotsDir,
   screenshotsDir,
   evidenceLibraryDir,
