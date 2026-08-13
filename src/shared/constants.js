@@ -26,6 +26,8 @@ const IPC = {
   TAGS_DELETE: 'tags:delete',
   // evidence
   EVIDENCE_CAPTURE: 'evidence:capture',
+  EVIDENCE_IMPORT: 'evidence:import',
+  EVIDENCE_UPDATE: 'evidence:update',
   EVIDENCE_LIST: 'evidence:list',
   EVIDENCE_PACK: 'evidence:pack',
   EVIDENCE_PACK_STATUS: 'evidence:packStatus',

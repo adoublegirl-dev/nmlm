@@ -515,6 +515,9 @@ function fromDateTimeInput(value) {
   const ts = new Date(value).getTime()
   return Number.isFinite(ts) ? ts : null
 }
+function sameSecond(a, b) {
+  return Math.floor(Number(a) / 1000) === Math.floor(Number(b) / 1000)
+}
 
 async function load({ focusWorkStart = false } = {}) {
   try {
@@ -747,7 +750,7 @@ async function saveEdit() {
     const startTime = fromDateTimeInput(editForm.value.startValue)
     const endTime = fromDateTimeInput(editForm.value.endValue)
     if (startTime == null || endTime == null) return alert('请填写有效的开始和结束时间')
-    if (startTime !== editEntry.value.start_time || endTime !== editEntry.value.end_time) {
+    if (!sameSecond(startTime, editEntry.value.start_time) || !sameSecond(endTime, editEntry.value.end_time)) {
       await api('ledger:adjustTime', { id: editEntry.value.id, startTime, endTime })
     }
   }
@@ -761,14 +764,23 @@ async function saveEdit() {
   } else {
     const baseTag = editForm.value.tagId
     const willSplit = editForm.value.pausePoints.some((p) => Number(p.tagId) !== Number(baseTag))
+    let cleanupSameTagPoints = false
     if (willSplit) {
       const ok = confirm('时间节点中存在与当前记录不同的标签。确认后，当前记录将按节点拆分成多条，并自动合并连续相同标签。')
       if (!ok) return
+    } else {
+      const hasNodeDetail = editForm.value.pausePoints.some((p) => p.detail?.trim())
+      const msg = hasNodeDetail
+        ? '暂停点标签和起始标签一致，不需要切分。确认后会合并整个片段并移除暂停点；暂停点文字会追加到片段备注中，避免丢失。是否执行？'
+        : '暂停点标签和起始标签一致，不需要切分。确认后会合并整个片段并移除这些暂停点。是否执行？'
+      cleanupSameTagPoints = confirm(msg)
+      if (!cleanupSameTagPoints) return
     }
     const r = await api('ledger:applyPausePointPlan', {
       entryId: editEntry.value.id,
       baseTagId: editForm.value.tagId,
       detail,
+      cleanupSameTagPoints,
       points: editForm.value.pausePoints.map((p) => ({
         id: p.id,
         ts: fromDateTimeInput(p.timeValue),
@@ -778,6 +790,7 @@ async function saveEdit() {
     })
     if (!r.ok) return alert(r.error || '保存失败')
     if (r.split) alert('已按时间节点拆分并刷新台账')
+    else if (r.cleaned) alert('已合并片段并清理同标签暂停点')
   }
   expandedEntryId.value = null
   editEntry.value = null

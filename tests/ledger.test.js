@@ -10,7 +10,7 @@ const report = require('../src/main/services/report')
 const todos = require('../src/main/services/todos')
 const { startOfDay, endOfDay, formatDuration, dayRange } = require('../src/main/utils/time')
 
-const { entriesRepo, pausePointsRepo } = db
+const { entriesRepo, pausePointsRepo, evidenceRepo } = db
 
 // 每个用例用独立内存库；窗口采集替换为空实现（避免真调 PowerShell 与缓存干扰）
 beforeEach(() => {
@@ -283,6 +283,59 @@ describe('ledger 状态机', () => {
     expect(points[0].detail).toBe('接了个电话')
   })
 
+  it('同标签暂停点确认合并时会清理暂停点并保留文字记录', () => {
+    const base = 1786300000000
+    const entry = entriesRepo.insertFinished({
+      startTime: base,
+      endTime: base + 30 * 60 * 1000,
+      durationSec: 30 * 60,
+      tagId: 1,
+      detail: '长任务',
+      windowTitle: null,
+      isFragment: 0
+    })
+    const p1 = pausePointsRepo.insert({ entryId: entry.id, ts: base + 10 * 60 * 1000 })
+    const r = ledger.applyPausePointPlan({
+      entryId: entry.id,
+      baseTagId: 1,
+      detail: '长任务',
+      cleanupSameTagPoints: true,
+      points: [{ id: p1.id, tagId: 1, detail: '中途确认了一下需求' }]
+    })
+    expect(r.ok).toBe(true)
+    expect(r.cleaned).toBe(true)
+    expect(pausePointsRepo.listByEntry(entry.id).length).toBe(0)
+    const updated = entriesRepo.get(entry.id)
+    expect(updated.detail).toContain('长任务')
+    expect(updated.detail).toContain('时间节点记录')
+    expect(updated.detail).toContain('中途确认了一下需求')
+  })
+
+  it('拆分后相邻片段改成同标签会自动归并', () => {
+    const base = 1786300000000
+    const entry = entriesRepo.insertFinished({
+      startTime: base,
+      endTime: base + 30 * 60 * 1000,
+      durationSec: 30 * 60,
+      tagId: 1,
+      detail: '长任务',
+      windowTitle: null,
+      isFragment: 0
+    })
+    const p1 = pausePointsRepo.insert({ entryId: entry.id, ts: base + 10 * 60 * 1000 })
+    const split = ledger.applyPausePointPlan({ entryId: entry.id, baseTagId: 1, points: [{ id: p1.id, tagId: 2, detail: '切到开会' }] })
+    expect(split.ok).toBe(true)
+    let rows = entriesRepo.listByRange(base - 1, base + 31 * 60 * 1000)
+    expect(rows.length).toBe(2)
+    const ret = ledger.retag(rows[1].id, { tagId: 1 })
+    expect(ret.ok).toBe(true)
+    rows = entriesRepo.listByRange(base - 1, base + 31 * 60 * 1000)
+    expect(rows.length).toBe(1)
+    expect(rows[0].start_time).toBe(base)
+    expect(rows[0].end_time).toBe(base + 30 * 60 * 1000)
+    expect(rows[0].tag_id).toBe(1)
+  })
+
   it('进行中记录可按暂停点拆分，最后一段保持进行中', () => {
     const base = 1786300000000
     vi.useFakeTimers()
@@ -412,6 +465,88 @@ describe('report 聚合', () => {
     expect(report.dailyTimeline(now)).toEqual([])
     expect(report.effectiveHours(now)).toBe(0)
     expect(report.dailyTrend(now)).toEqual([])
+  })
+})
+
+describe('evidence 证据库索引', () => {
+  it('可写入证据项、记录 hash 和元数据，并按日期范围读取', () => {
+    const ts = new Date(2026, 7, 13, 10, 30, 0).getTime()
+    const item = evidenceRepo.insert({
+      id: 'ev_test_001',
+      type: 'screenshot',
+      source: 'screenshot',
+      status: 'captured',
+      originalPath: 'D:/牛马证据/牛马联盟证据库/captures/2026/08/13/raw/a.png',
+      relativePath: 'captures/2026/08/13/raw/a.png',
+      sha256: 'a'.repeat(64),
+      sizeBytes: 1234,
+      mimeType: 'image/png',
+      createdAt: ts,
+      importedAt: ts + 1,
+      capturedAt: ts,
+      deviceId: 'test-device',
+      ledgerEntryId: null,
+      tagId: null,
+      title: '测试截图'
+    })
+    expect(item.id).toBe('ev_test_001')
+    expect(item.sha256).toBe('a'.repeat(64))
+    evidenceRepo.insertMetadata(item.id, 'window_title', '测试窗口')
+    const metas = evidenceRepo.listMetadata(item.id)
+    expect(metas.length).toBe(1)
+    expect(JSON.parse(metas[0].value_json)).toBe('测试窗口')
+    const list = evidenceRepo.listByRange(ts - 1000, ts + 1000)
+    expect(list.length).toBe(1)
+    expect(list[0].relative_path).toContain('captures/2026/08/13/raw')
+  })
+
+  it('导入材料按 imported_at 进入当天列表，即使原始创建时间较早', () => {
+    const oldTs = new Date(2025, 0, 1, 10, 0, 0).getTime()
+    const importTs = new Date(2026, 7, 13, 18, 0, 0).getTime()
+    evidenceRepo.insert({
+      id: 'ev_import_001',
+      type: 'pdf',
+      source: 'manual_upload',
+      status: 'imported',
+      originalPath: 'D:/牛马证据/牛马联盟证据库/files/2026/08/13/raw/a.pdf',
+      relativePath: 'files/2026/08/13/raw/a.pdf',
+      sha256: 'b'.repeat(64),
+      sizeBytes: 4321,
+      mimeType: 'application/pdf',
+      createdAt: oldTs,
+      importedAt: importTs,
+      capturedAt: null,
+      title: 'a.pdf'
+    })
+    const list = evidenceRepo.listByRange(importTs - 1000, importTs + 1000)
+    expect(list.length).toBe(1)
+    expect(list[0].source).toBe('manual_upload')
+  })
+
+  it('可更新证据标题备注状态并写入复核记录', () => {
+    const ts = new Date(2026, 7, 13, 19, 0, 0).getTime()
+    evidenceRepo.insert({
+      id: 'ev_review_001',
+      type: 'screenshot',
+      source: 'screenshot',
+      status: 'captured',
+      originalPath: 'D:/牛马证据/牛马联盟证据库/captures/2026/08/13/raw/r.png',
+      relativePath: 'captures/2026/08/13/raw/r.png',
+      sha256: 'c'.repeat(64),
+      sizeBytes: 222,
+      mimeType: 'image/png',
+      createdAt: ts,
+      importedAt: ts,
+      capturedAt: ts,
+      title: '原标题'
+    })
+    const updated = evidenceRepo.update('ev_review_001', { status: 'reviewed', title: '已确认截图', userNote: '可用于证据链' })
+    const review = evidenceRepo.upsertReview('ev_review_001', { reviewStatus: 'reviewed', confirmedTitle: updated.title, userNote: updated.user_note })
+    expect(updated.status).toBe('reviewed')
+    expect(updated.title).toBe('已确认截图')
+    expect(updated.user_note).toBe('可用于证据链')
+    expect(review.review_status).toBe('reviewed')
+    expect(review.confirmed_title).toBe('已确认截图')
   })
 })
 

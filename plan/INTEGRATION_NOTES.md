@@ -81,6 +81,7 @@ npm run dev                 # 构建后启动 electron
 
 ## 八、更新记录
 
+- 2026-08-13（台账收口 + 证据 P1）：台账模块完成 P1/P2 后暂停 P3：支持跨天虚拟裁剪、事后校准、补记、事后切分、剪辑台拖拽/磁吸/秒级调整；同标签相邻片段自动归并，同标签暂停点可确认清理并把节点文字追加进片段备注。证据模块进入 P1：新增 evidence_items/evidence_metadata/evidence_reviews；截图进入“牛马联盟证据库/captures/YYYY/MM/DD/raw”，临时文件 rename、sha256、meta JSON，raw 原件不加水印不覆盖；F10 默认截鼠标所在显示器并记录 cursor/display 元数据；支持手动导入材料到 files/YYYY/MM/DD/raw；证据工作台支持列表、预览、基础元数据和人工复核。执行状态见 plan/PROJECT_TODO.md。
 - 2026-08-05：P0 完成。坑点 1-8 记录。设计文档 DESIGN.md v0.2。
 - 2026-08-05（补丁）：迷你栏提亮（高对比边框/实背景/投影，解决浅色壁纸下看不见）；实现拖拽（mousedown/mousemove 区分点击与拖动，IPC mini:setPos 带屏幕边界 clamp）；面板主题提亮一档（--bg-deep #1a1d23）。
 - 2026-08-05（补丁2）：修四件事：① 截图空图（thumbnailSize 传真实屏幕尺寸）；② 设置页补标签管理分区（增删改/数字键/颜色/摸鱼标记）；③ 台账记录点击可编辑（改标签 + 写备注 detail，走 ledger:retag）；④ 迷你栏拖拽漂移（去掉 mousemove 基准同步）；⑤ ABI 切换方案改为 prebuild-install，npm test/dev 自动切换。

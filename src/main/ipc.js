@@ -90,6 +90,8 @@ function registerAll() {
 
   // evidence
   registerHandler(IPC.EVIDENCE_CAPTURE, () => evidence.capture())
+  registerHandler(IPC.EVIDENCE_IMPORT, (a) => evidence.importWithDialog(a))
+  registerHandler(IPC.EVIDENCE_UPDATE, (a) => evidence.updateEvidence(a))
   registerHandler(IPC.EVIDENCE_LIST, (a) => ({ ok: true, screenshots: evidence.listByRange(a.start, a.end) }))
   registerHandler(IPC.EVIDENCE_PACK, (a) => evidence.pack(a))
   registerHandler(IPC.EVIDENCE_PACK_STATUS, () => ({ ok: true, ...evidence.packStatus() }))

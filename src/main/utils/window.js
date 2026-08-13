@@ -3,6 +3,8 @@
 const { execFile } = require('child_process')
 
 const PS_SCRIPT = `
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
@@ -32,7 +34,8 @@ function getActiveWindow(force = false) {
   const p = new Promise((resolve) => {
     execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', PS_SCRIPT], {
       timeout: 4000,
-      windowsHide: true
+      windowsHide: true,
+      encoding: 'utf8'
     }, (err, stdout) => {
       if (err || !stdout) {
         resolve(null)

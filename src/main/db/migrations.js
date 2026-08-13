@@ -136,6 +136,62 @@ const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS idx_ledger_revisions_entry ON ledger_revisions(entry_id);
       CREATE INDEX IF NOT EXISTS idx_ledger_revisions_created ON ledger_revisions(created_at);
     `
+  },
+  {
+    version: 6,
+    name: 'evidence-library-core',
+    sql: `
+      CREATE TABLE IF NOT EXISTS evidence_items (
+        id                  TEXT PRIMARY KEY,
+        type                TEXT NOT NULL,
+        source              TEXT NOT NULL,
+        status              TEXT NOT NULL DEFAULT 'captured',
+        original_path       TEXT NOT NULL,
+        relative_path       TEXT NOT NULL,
+        sha256              TEXT NOT NULL,
+        size_bytes          INTEGER NOT NULL,
+        mime_type           TEXT,
+        created_at          INTEGER NOT NULL,
+        imported_at         INTEGER NOT NULL,
+        captured_at         INTEGER,
+        device_id           TEXT,
+        ledger_entry_id     INTEGER REFERENCES time_entries(id),
+        tag_id              INTEGER REFERENCES tags(id),
+        title               TEXT,
+        user_note           TEXT,
+        unsupported_reason  TEXT,
+        is_deleted          INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_evidence_created ON evidence_items(created_at);
+      CREATE INDEX IF NOT EXISTS idx_evidence_captured ON evidence_items(captured_at);
+      CREATE INDEX IF NOT EXISTS idx_evidence_status ON evidence_items(status);
+      CREATE INDEX IF NOT EXISTS idx_evidence_ledger ON evidence_items(ledger_entry_id);
+      CREATE INDEX IF NOT EXISTS idx_evidence_sha ON evidence_items(sha256);
+
+      CREATE TABLE IF NOT EXISTS evidence_metadata (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        evidence_id     TEXT NOT NULL REFERENCES evidence_items(id),
+        key             TEXT NOT NULL,
+        value_json      TEXT,
+        source          TEXT NOT NULL DEFAULT 'system',
+        created_at      INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_evidence_meta_item ON evidence_metadata(evidence_id);
+
+      CREATE TABLE IF NOT EXISTS evidence_reviews (
+        id                    TEXT PRIMARY KEY,
+        evidence_id            TEXT NOT NULL REFERENCES evidence_items(id),
+        review_status          TEXT NOT NULL DEFAULT 'pending',
+        confirmed_title        TEXT,
+        confirmed_summary      TEXT,
+        confirmed_tags_json    TEXT,
+        accepted_claims_json   TEXT,
+        user_note              TEXT,
+        created_at             INTEGER NOT NULL,
+        updated_at             INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_evidence_review_item ON evidence_reviews(evidence_id);
+    `
   }
 ]
 

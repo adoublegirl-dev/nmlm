@@ -110,14 +110,20 @@
     <div class="card section">
       <h3>证据</h3>
       <div class="row">
-        <span>截图保留天数</span>
-        <input class="input time" type="number" :value="evidence.keepDays" @change="setEvidence('keepDays', Number($event.target.value))" />
+        <span class="muted">原始证据</span>
+        <span>永久保留在 raw 目录，系统不会加水印、压缩替换或自动物理删除。</span>
       </div>
       <div class="row">
-        <span>水印</span>
-        <input type="checkbox" :checked="evidence.watermark" @change="setEvidence('watermark', $event.target.checked)" />
+        <span>缩略图缓存保留天数</span>
+        <input class="input time" type="number" :value="evidence.keepDays" @change="setEvidence('keepDays', Number($event.target.value))" />
+        <span class="muted">仅用于未来缩略图/缓存清理，不影响原始证据。</span>
       </div>
-      <button class="btn" @click="openScreenshotsDir">打开截图目录</button>
+      <div class="row">
+        <span>导出副本加水印</span>
+        <input type="checkbox" :checked="evidence.watermark" @change="setEvidence('watermark', $event.target.checked)" />
+        <span class="muted">只作用于未来导出的副本，绝不修改 raw 原件。</span>
+      </div>
+      <button class="btn" @click="openScreenshotsDir">打开证据库目录</button>
     </div>
 
     <div class="card section">

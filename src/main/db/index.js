@@ -247,6 +247,130 @@ const screenshotsRepo = {
   }
 }
 
+// ---------- 证据库仓储 ----------
+const evidenceRepo = {
+  insert(item) {
+    getDb()
+      .prepare(`INSERT INTO evidence_items (
+        id, type, source, status, original_path, relative_path, sha256, size_bytes, mime_type,
+        created_at, imported_at, captured_at, device_id, ledger_entry_id, tag_id, title, user_note,
+        unsupported_reason, is_deleted
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`) 
+      .run(
+        item.id,
+        item.type,
+        item.source,
+        item.status || 'captured',
+        item.originalPath,
+        item.relativePath,
+        item.sha256,
+        item.sizeBytes,
+        item.mimeType || null,
+        item.createdAt,
+        item.importedAt,
+        item.capturedAt || null,
+        item.deviceId || null,
+        item.ledgerEntryId || null,
+        item.tagId || null,
+        item.title || null,
+        item.userNote || null,
+        item.unsupportedReason || null,
+        item.isDeleted ? 1 : 0
+      )
+    return this.get(item.id)
+  },
+  get(id) {
+    return getDb().prepare('SELECT * FROM evidence_items WHERE id = ?').get(id)
+  },
+  update(id, patch = {}) {
+    const map = {
+      status: 'status',
+      title: 'title',
+      userNote: 'user_note',
+      tagId: 'tag_id',
+      ledgerEntryId: 'ledger_entry_id',
+      unsupportedReason: 'unsupported_reason',
+      isDeleted: 'is_deleted'
+    }
+    const fields = []
+    const vals = []
+    for (const [key, col] of Object.entries(map)) {
+      if (patch[key] !== undefined) {
+        fields.push(`${col} = ?`)
+        vals.push(key === 'isDeleted' ? (patch[key] ? 1 : 0) : patch[key])
+      }
+    }
+    if (!fields.length) return this.get(id)
+    vals.push(id)
+    getDb().prepare(`UPDATE evidence_items SET ${fields.join(', ')} WHERE id = ?`).run(...vals)
+    return this.get(id)
+  },
+  listByRange(start, end) {
+    return getDb()
+      .prepare(`SELECT * FROM evidence_items
+                WHERE is_deleted = 0 AND COALESCE(captured_at, imported_at, created_at) >= ? AND COALESCE(captured_at, imported_at, created_at) < ?
+                ORDER BY COALESCE(captured_at, imported_at, created_at) DESC`)
+      .all(start, end)
+  },
+  insertMetadata(evidenceId, key, value, source = 'system') {
+    const info = getDb()
+      .prepare('INSERT INTO evidence_metadata (evidence_id, key, value_json, source, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(evidenceId, key, JSON.stringify(value), source, Date.now())
+    return getDb().prepare('SELECT * FROM evidence_metadata WHERE id = ?').get(info.lastInsertRowid)
+  },
+  listMetadata(evidenceId) {
+    return getDb().prepare('SELECT * FROM evidence_metadata WHERE evidence_id = ? ORDER BY id').all(evidenceId)
+  },
+  upsertReview(evidenceId, patch = {}) {
+    const now = Date.now()
+    const existing = getDb().prepare('SELECT * FROM evidence_reviews WHERE evidence_id = ? ORDER BY updated_at DESC LIMIT 1').get(evidenceId)
+    if (!existing) {
+      const id = `rev_${now}_${Math.random().toString(16).slice(2, 8)}`
+      getDb()
+        .prepare(`INSERT INTO evidence_reviews (
+          id, evidence_id, review_status, confirmed_title, confirmed_summary,
+          confirmed_tags_json, accepted_claims_json, user_note, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`) 
+        .run(
+          id,
+          evidenceId,
+          patch.reviewStatus || 'pending',
+          patch.confirmedTitle || null,
+          patch.confirmedSummary || null,
+          patch.confirmedTags ? JSON.stringify(patch.confirmedTags) : null,
+          patch.acceptedClaims ? JSON.stringify(patch.acceptedClaims) : null,
+          patch.userNote || null,
+          now,
+          now
+        )
+      return getDb().prepare('SELECT * FROM evidence_reviews WHERE id = ?').get(id)
+    }
+    const map = {
+      reviewStatus: 'review_status',
+      confirmedTitle: 'confirmed_title',
+      confirmedSummary: 'confirmed_summary',
+      confirmedTags: 'confirmed_tags_json',
+      acceptedClaims: 'accepted_claims_json',
+      userNote: 'user_note'
+    }
+    const fields = []
+    const vals = []
+    for (const [key, col] of Object.entries(map)) {
+      if (patch[key] !== undefined) {
+        fields.push(`${col} = ?`)
+        vals.push(['confirmedTags', 'acceptedClaims'].includes(key) ? JSON.stringify(patch[key]) : patch[key])
+      }
+    }
+    fields.push('updated_at = ?'); vals.push(now)
+    vals.push(existing.id)
+    getDb().prepare(`UPDATE evidence_reviews SET ${fields.join(', ')} WHERE id = ?`).run(...vals)
+    return getDb().prepare('SELECT * FROM evidence_reviews WHERE id = ?').get(existing.id)
+  },
+  getReview(evidenceId) {
+    return getDb().prepare('SELECT * FROM evidence_reviews WHERE evidence_id = ? ORDER BY updated_at DESC LIMIT 1').get(evidenceId)
+  }
+}
+
 // ---------- 证据包仓储 ----------
 const packsRepo = {
   insert({ dateStart, dateEnd, zipPath, summary, ntpOffsetMs = 0 }) {
@@ -300,4 +424,4 @@ const settingsRepo = {
   }
 }
 
-module.exports = { init, getDb, tagsRepo, entriesRepo, ledgerRevisionsRepo, pausePointsRepo, todosRepo, screenshotsRepo, packsRepo, activityRepo, settingsRepo }
+module.exports = { init, getDb, tagsRepo, entriesRepo, ledgerRevisionsRepo, pausePointsRepo, todosRepo, screenshotsRepo, evidenceRepo, packsRepo, activityRepo, settingsRepo }

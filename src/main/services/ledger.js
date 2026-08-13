@@ -187,11 +187,61 @@ async function resume({ tagId = null, detail = null } = {}) {
 
 function current() { return decoratePaused(rawCurrent()) }
 
+function sameTag(a, b) {
+  return Number(a?.tag_id ?? 0) === Number(b?.tag_id ?? 0)
+}
+
+function mergeAdjacentSameTagAround(entryId) {
+  const entry = entriesRepo.get(entryId)
+  if (!entry || !entry.end_time) return entry
+  return getDb().transaction(() => {
+    let cur = entriesRepo.get(entryId)
+    let changed = false
+    while (cur && cur.end_time) {
+      const prev = getDb().prepare('SELECT * FROM time_entries WHERE end_time = ? AND id != ? ORDER BY id DESC LIMIT 1').get(cur.start_time, cur.id)
+      if (!prev || !prev.end_time || !sameTag(prev, cur)) break
+      const durationSec = Math.max(0, Math.floor((cur.end_time - prev.start_time) / 1000))
+      entriesRepo.finish(prev.id, {
+        endTime: cur.end_time,
+        durationSec,
+        tagId: prev.tag_id,
+        detail: prev.detail || cur.detail,
+        windowTitle: prev.window_title || cur.window_title,
+        isFragment: isFragmentByDuration(durationSec)
+      })
+      pausePointsRepo.removeByEntry(cur.id)
+      entriesRepo.remove(cur.id)
+      cur = entriesRepo.get(prev.id)
+      changed = true
+    }
+    while (cur && cur.end_time) {
+      const next = getDb().prepare('SELECT * FROM time_entries WHERE start_time = ? AND id != ? ORDER BY id LIMIT 1').get(cur.end_time, cur.id)
+      if (!next || !next.end_time || !sameTag(cur, next)) break
+      const durationSec = Math.max(0, Math.floor((next.end_time - cur.start_time) / 1000))
+      entriesRepo.finish(cur.id, {
+        endTime: next.end_time,
+        durationSec,
+        tagId: cur.tag_id,
+        detail: cur.detail || next.detail,
+        windowTitle: cur.window_title || next.window_title,
+        isFragment: isFragmentByDuration(durationSec)
+      })
+      pausePointsRepo.removeByEntry(next.id)
+      entriesRepo.remove(next.id)
+      cur = entriesRepo.get(cur.id)
+      changed = true
+    }
+    if (changed) ledgerRevisionsRepo.insert({ entryId: cur.id, action: 'merge_adjacent_same_tag', before: { entryId }, after: cur })
+    return cur
+  })()
+}
+
 function retag(id, { tagId = null, detail = null } = {}) {
   const entry = entriesRepo.get(id)
   if (!entry) return { ok: false, error: '记录不存在' }
   const updated = entriesRepo.updateMeta(id, { tagId: validTagId(tagId), detail: detail !== null ? detail : entry.detail })
-  return { ok: true, entry: updated }
+  const merged = mergeAdjacentSameTagAround(updated.id)
+  return { ok: true, entry: merged || updated }
 }
 
 function adjustTime({ id, startTime, endTime } = {}) {
@@ -249,7 +299,21 @@ function addPausePoint({ detail = null } = {}) {
 function listPausePointsByRange(start, end) { return pausePointsRepo.listByRange(start, end) }
 function listByRange(start, end) { return entriesRepo.listByRange(start, end) }
 
-function applyPausePointPlan({ entryId, points = [], baseTagId, detail } = {}) {
+function formatNodeTime(ts) {
+  const d = new Date(ts)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
+}
+
+function appendNodeNotes(detail, points = []) {
+  const notes = points
+    .filter((p) => p.detail)
+    .map((p) => `${formatNodeTime(p.ts)} · ${p.detail}`)
+  if (!notes.length) return detail
+  const block = `时间节点记录：\n${notes.map((x) => `- ${x}`).join('\n')}`
+  return detail ? `${detail}\n${block}` : block
+}
+
+function applyPausePointPlan({ entryId, points = [], baseTagId, detail, cleanupSameTagPoints = false } = {}) {
   const entry = entriesRepo.get(entryId)
   if (!entry) return { ok: false, error: '记录不存在' }
   const finalBaseTagId = baseTagId !== undefined ? validTagId(baseTagId) : entry.tag_id
@@ -283,8 +347,11 @@ function applyPausePointPlan({ entryId, points = [], baseTagId, detail } = {}) {
       else pausePointsRepo.insert({ entryId: entry.id, ts: p.ts, tagId: p.tagId, detail: p.detail })
     }
     if (!wantsSplit) {
-      const updated = entriesRepo.updateMeta(entry.id, { tagId: finalBaseTagId, detail: finalDetail })
-      return { entries: [updated], split: false, updatedOnly: true }
+      const latestPoints = pausePointsRepo.listByEntry(entry.id).sort((a, b) => a.ts - b.ts)
+      const nextDetail = cleanupSameTagPoints ? appendNodeNotes(finalDetail, latestPoints) : finalDetail
+      if (cleanupSameTagPoints) pausePointsRepo.removeByEntry(entry.id)
+      const updated = entriesRepo.updateMeta(entry.id, { tagId: finalBaseTagId, detail: nextDetail })
+      return { entries: [updated], split: false, updatedOnly: true, cleaned: !!cleanupSameTagPoints }
     }
 
     const latestEntry = entriesRepo.get(entry.id)
