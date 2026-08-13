@@ -17,6 +17,8 @@ const IPC = {
   LEDGER_LIST: 'ledger:list',
   LEDGER_RECOVER: 'ledger:recover',
   LEDGER_RETAG: 'ledger:retag',
+  LEDGER_ADJUST_TIME: 'ledger:adjustTime',
+  LEDGER_MANUAL_CREATE: 'ledger:manualCreate',
   // tags
   TAGS_LIST: 'tags:list',
   TAGS_CREATE: 'tags:create',

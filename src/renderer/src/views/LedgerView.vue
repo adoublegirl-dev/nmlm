@@ -8,6 +8,7 @@
         <span class="day-label">{{ dayLabel(curDate) }}</span>
       </div>
       <div class="actions">
+        <button class="btn" @click="openManualCreate">补记一段</button>
         <button v-if="!recording" class="btn primary" @click="doStart">开始记录</button>
         <template v-else>
           <button class="btn primary" @click="doStop">完成记录</button>
@@ -57,13 +58,15 @@
                 v-for="clip in timelineClips"
                 :key="clip.id"
                 class="clip"
-                :class="{ fragment: clip.is_fragment, micro: clip.duration_sec < 10, running: !clip.end_time }"
+                :class="{ fragment: clip.is_fragment, micro: clip.duration_sec < 10, running: !clip.end_time, adjustable: canDragClip(clip), resizing: clip.resizing, snap: clip.snap }"
                 :style="{ left: clip.left + '%', width: clip.width + '%', top: (42 + clip.lane * 28) + 'px', '--clip-color': clip.color }"
-                :title="clip.trackTitle"
+                :title="clip.crossDay ? `${clip.trackTitle}\n跨天原始：${clip.actualRangeText}` : clip.trackTitle"
                 @click="openClipFromTimeline(clip)"
               >
+                <span v-if="canDragClip(clip)" class="clip-resize left" title="拖动调整开始时间" @mousedown.stop.prevent="startClipResize($event, clip, 'start')"></span>
                 <span class="clip-label">{{ clip.tagName }}</span>
                 <span class="clip-time num">{{ clip.startText }} – {{ clip.endText }}</span>
+                <span v-if="canDragClip(clip)" class="clip-resize right" title="拖动调整结束时间" @mousedown.stop.prevent="startClipResize($event, clip, 'end')"></span>
               </button>
               <button
                 v-for="node in timelineNodes"
@@ -108,6 +111,7 @@
           <span class="date-chip num">{{ s.dateText }}</span>
           <span class="seg-time num">{{ s.startText }} – {{ s.endText }}</span>
           <span class="tag-chip" :style="{ background: s.color + '26', color: s.color }">{{ s.tagName }}</span>
+          <span v-if="s.crossDay" class="cross-chip" :title="s.actualRangeText">跨天</span>
           <span class="seg-dur num">{{ s.durText }}</span>
           <span v-if="s.is_fragment" class="frag muted">碎片</span>
           <span class="pause-chip">节点 × {{ s.pausePoints?.length || 0 }}</span>
@@ -119,7 +123,19 @@
           </span>
         </div>
         <div v-if="expandedEntryId === s.id" class="inline-edit" @click.stop>
-          <div class="edit-time muted num">{{ s.startText }} – {{ s.endText }} · {{ s.durText }}</div>
+          <div class="edit-time muted num">
+            {{ s.startText }} – {{ s.endText }} · {{ s.durText }}
+            <span v-if="s.crossDay"> · 原始 {{ s.actualRangeText }}</span>
+          </div>
+          <div v-if="s.end_time" class="time-calibrate">
+            <label>实际开始
+              <input class="input time-input" type="datetime-local" step="1" v-model="editForm.startValue" />
+            </label>
+            <label>实际结束
+              <input class="input time-input" type="datetime-local" step="1" v-model="editForm.endValue" />
+            </label>
+          </div>
+          <div v-else class="muted split-hint">进行中的记录请先完成，再校准起止时间。</div>
           <div class="edit-tags">
             <button
               v-for="t in tags" :key="t.id"
@@ -149,6 +165,35 @@
       </div>
       </template>
     </div>
+
+    <div v-if="manualOpen" class="manual-mask" @click="closeManualCreate">
+      <div class="manual-card card" @click.stop>
+        <div class="manual-head">
+          <h3>补记一段</h3>
+          <span class="muted">用于事后补录忘记开启计时器的工作片段。</span>
+        </div>
+        <div class="manual-grid">
+          <label>开始时间
+            <input class="input" type="datetime-local" step="1" v-model="manualForm.startValue" />
+          </label>
+          <label>结束时间
+            <input class="input" type="datetime-local" step="1" v-model="manualForm.endValue" />
+          </label>
+          <label>标签
+            <select class="input" v-model.number="manualForm.tagId">
+              <option v-for="t in tags" :key="t.id" :value="t.id">{{ t.name }}</option>
+            </select>
+          </label>
+          <label>备注
+            <textarea class="input" rows="3" v-model="manualForm.detail" placeholder="这段在做什么…"></textarea>
+          </label>
+        </div>
+        <div class="edit-ops">
+          <button class="btn" @click="closeManualCreate">取消</button>
+          <button class="btn primary" @click="saveManualCreate">保存补记</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -167,7 +212,9 @@ const effectiveSec = ref(0)
 const fragments = ref(0)
 const tags = ref([])
 const editEntry = ref(null)
-const editForm = ref({ tagId: null, detail: '', pausePoints: [] })
+const editForm = ref({ tagId: null, detail: '', startValue: '', endValue: '', pausePoints: [] })
+const manualOpen = ref(false)
+const manualForm = ref({ startValue: '', endValue: '', tagId: null, detail: '' })
 const detailMode = ref('collapsed') // collapsed | single | all
 const expandedEntryId = ref(null)
 const timelineZoom = ref(2)
@@ -176,6 +223,10 @@ const timelineDragging = ref(false)
 let dragStartX = 0
 let dragStartScrollLeft = 0
 let dragMoved = false
+const resizePreview = ref(null) // { id, edge, startTime, endTime, snap }
+let resizingClip = null
+let resizeEdge = null
+let resizeGuide = null
 
 const isToday = computed(() => new Date(curDate.value).toDateString() === new Date().toDateString())
 const isYesterday = computed(() => new Date(curDate.value).toDateString() === new Date(startOfDay(Date.now()) - DAY_MS).toDateString())
@@ -232,17 +283,29 @@ const timelineClips = computed(() => {
     .slice()
     .sort((a, b) => a.start_time - b.start_time)
     .map((s) => {
-      const endAt = s.end_time || (s.paused ? s.paused_at : Date.now())
-      let lane = lanes.findIndex((laneEnd) => s.start_time >= laneEnd)
+      const preview = resizePreview.value && resizePreview.value.id === s.id ? resizePreview.value : null
+      const endAt = preview ? preview.endTime : (s.viewEndTime || s.end_time || (s.paused ? s.paused_at : Date.now()))
+      const startAt = preview ? preview.startTime : (s.viewStartTime || s.start_time)
+      let lane = lanes.findIndex((laneEnd) => startAt >= laneEnd)
       if (lane < 0) {
         lane = lanes.length
         lanes.push(endAt)
       } else {
         lanes[lane] = endAt
       }
-      const left = clampPct(((s.start_time - start) / DAY_MS) * 100)
-      const width = clampPct(((endAt - s.start_time) / DAY_MS) * 100)
-      return { ...s, left, width, lane }
+      const left = clampPct(((startAt - start) / DAY_MS) * 100)
+      const width = clampPct(((endAt - startAt) / DAY_MS) * 100)
+      return {
+        ...s,
+        left,
+        width,
+        lane,
+        startText: preview ? formatTime(startAt, { seconds: true }) : s.startText,
+        endText: preview ? formatTime(endAt, { seconds: true }) : s.endText,
+        durText: preview ? formatDuration(Math.max(0, Math.floor((endAt - startAt) / 1000))) : s.durText,
+        resizing: !!preview,
+        snap: !!preview?.snap
+      }
     })
 })
 const timelineNodes = computed(() => {
@@ -323,6 +386,99 @@ function stopTimelineDrag() {
   window.removeEventListener('mousemove', moveTimelineDrag)
   setTimeout(() => { dragMoved = false }, 0)
 }
+function canDragClip(clip) {
+  return !!clip.end_time && !clip.crossDay
+}
+function eventToTimelineTs(e) {
+  const canvas = document.querySelector('.timeline-canvas')
+  if (!canvas) return null
+  const rect = canvas.getBoundingClientRect()
+  const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left))
+  const ratio = rect.width ? x / rect.width : 0
+  const dayStart = startOfDay(curDate.value)
+  const raw = dayStart + ratio * DAY_MS
+  const z = timelineZoom.value
+  const step = z >= 48
+    ? 1000
+    : z >= 32
+      ? 5 * 1000
+      : z >= 16
+        ? 10 * 1000
+        : z >= 8
+          ? 15 * 1000
+          : z >= 4
+            ? 60 * 1000
+            : 5 * 60 * 1000
+  return Math.round(raw / step) * step
+}
+function neighborBoundary(clip, edge) {
+  const sameDay = segments.value
+    .filter((s) => s.id !== clip.id && s.end_time && !s.crossDay)
+    .slice()
+    .sort((a, b) => a.start_time - b.start_time)
+  if (edge === 'end') {
+    const next = sameDay.find((s) => s.start_time >= clip.end_time)
+    return next ? next.start_time : null
+  }
+  const prev = sameDay.filter((s) => s.end_time <= clip.start_time).pop()
+  return prev ? prev.end_time : null
+}
+function applyResizeSnap(clip, edge, ts) {
+  const boundary = neighborBoundary(clip, edge)
+  const snapWindow = 2 * 60 * 1000
+  if (boundary != null) {
+    if (edge === 'end' && (ts >= boundary || Math.abs(ts - boundary) <= snapWindow)) return { ts: boundary, snap: true }
+    if (edge === 'start' && (ts <= boundary || Math.abs(ts - boundary) <= snapWindow)) return { ts: boundary, snap: true }
+  }
+  return { ts, snap: false }
+}
+function updateResizePreview(clip, edge, guide, snap = false) {
+  const minDuration = 1000
+  let startTime = edge === 'start' ? guide : clip.start_time
+  let endTime = edge === 'end' ? guide : clip.end_time
+  if (edge === 'start') startTime = Math.min(startTime, clip.end_time - minDuration)
+  if (edge === 'end') endTime = Math.max(endTime, clip.start_time + minDuration)
+  resizePreview.value = { id: clip.id, edge, startTime, endTime, snap }
+}
+function startClipResize(e, clip, edge) {
+  if (!canDragClip(clip)) return
+  resizingClip = clip
+  resizeEdge = edge
+  resizeGuide = edge === 'start' ? clip.start_time : clip.end_time
+  updateResizePreview(clip, edge, resizeGuide, false)
+  dragMoved = true
+  window.addEventListener('mousemove', moveClipResize)
+  window.addEventListener('mouseup', stopClipResize, { once: true })
+}
+function moveClipResize(e) {
+  if (!resizingClip) return
+  const ts = eventToTimelineTs(e)
+  if (ts == null) return
+  const snapped = applyResizeSnap(resizingClip, resizeEdge, Math.min(ts, Date.now()))
+  resizeGuide = snapped.ts
+  updateResizePreview(resizingClip, resizeEdge, resizeGuide, snapped.snap)
+}
+async function stopClipResize() {
+  window.removeEventListener('mousemove', moveClipResize)
+  const clip = resizingClip
+  const edge = resizeEdge
+  const ts = resizeGuide
+  resizingClip = null
+  resizeEdge = null
+  resizeGuide = null
+  resizePreview.value = null
+  setTimeout(() => { dragMoved = false }, 0)
+  if (!clip || ts == null) return
+  const startTime = edge === 'start' ? ts : clip.start_time
+  const endTime = edge === 'end' ? ts : clip.end_time
+  if (startTime === clip.start_time && endTime === clip.end_time) return
+  try {
+    await api('ledger:adjustTime', { id: clip.id, startTime, endTime })
+    await load()
+  } catch (err) {
+    alert(err.message || '时间调整失败')
+  }
+}
 function openClipFromTimeline(clip) {
   if (dragMoved) return
   if (detailMode.value === 'all') {
@@ -340,6 +496,20 @@ function toDateInput(ts) {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+function toDateTimeInput(ts) {
+  const d = new Date(ts)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  const ss = String(d.getSeconds()).padStart(2, '0')
+  return `${y}-${m}-${day}T${hh}:${mm}:${ss}`
+}
+function fromDateTimeInput(value) {
+  const ts = new Date(value).getTime()
+  return Number.isFinite(ts) ? ts : null
 }
 
 async function load({ focusWorkStart = false } = {}) {
@@ -365,21 +535,24 @@ async function load({ focusWorkStart = false } = {}) {
       e.tagName = tag.name
       e.color = tag.color
       e.pausePoints = pointsByEntry.get(e.id) || []
-      e.dateText = formatDate(e.start_time)
-      e.durText = formatDuration(e.duration_sec || 0)
-      e.startText = formatTime(e.start_time, { seconds: true })
-      e.endText = e.end_time ? formatTime(e.end_time, { seconds: true }) : '…'
+      const actualEnd = e.end_time || (e.paused ? e.paused_at : Date.now())
+      e.actualEndTime = actualEnd
+      e.viewStartTime = Math.max(e.start_time, start)
+      e.viewEndTime = Math.min(actualEnd, end)
+      e.viewDurationSec = Math.max(0, Math.floor((e.viewEndTime - e.viewStartTime) / 1000))
+      e.crossDay = e.start_time < start || actualEnd > end
+      e.dateText = formatDate(e.viewStartTime)
+      e.durText = formatDuration(e.viewDurationSec)
+      e.startText = formatTime(e.viewStartTime, { seconds: true })
+      e.endText = e.viewEndTime < actualEnd || e.end_time ? formatTime(e.viewEndTime, { seconds: true }) : '…'
+      e.actualRangeText = `${formatDate(e.start_time)} ${formatTime(e.start_time, { seconds: true })} – ${e.end_time ? `${formatDate(e.end_time)} ${formatTime(e.end_time, { seconds: true })}` : '进行中'}`
     }
     // 未完成记录实时刷新；暂停态停在 paused_at，避免视觉上继续跳秒。
     for (const e of raw) {
-      if (!e.end_time) {
-        const endAt = e.paused ? e.paused_at : Date.now()
-        e.durText = formatDuration(Math.floor((endAt - e.start_time) / 1000))
-      }
       decorateEntryTimeline(e, tagMap)
     }
     segments.value = raw
-    totalSec.value = raw.reduce((s, e) => s + (e.duration_sec || 0), 0)
+    totalSec.value = raw.reduce((s, e) => s + (e.viewDurationSec || 0), 0)
     effectiveSec.value = eff.sec
     fragments.value = raw.filter((e) => e.is_fragment).length
     const cur = await api('ledger:current')
@@ -391,18 +564,19 @@ async function load({ focusWorkStart = false } = {}) {
 }
 
 function decorateEntryTimeline(entry, tagMap) {
-  const trackEnd = entry.end_time || (entry.paused ? entry.paused_at : Date.now())
-  const totalMs = Math.max(1, trackEnd - entry.start_time)
+  const trackStart = entry.viewStartTime || entry.start_time
+  const trackEnd = entry.viewEndTime || entry.end_time || (entry.paused ? entry.paused_at : Date.now())
+  const totalMs = Math.max(1, trackEnd - trackStart)
   const cleanPoints = (entry.pausePoints || [])
-    .filter((p) => p.ts > entry.start_time && p.ts < trackEnd)
+    .filter((p) => p.ts > trackStart && p.ts < trackEnd)
     .sort((a, b) => a.ts - b.ts)
 
   entry.pausePoints = cleanPoints.map((p) => ({
     ...p,
-    left: clampPct(((p.ts - entry.start_time) / totalMs) * 100)
+    left: clampPct(((p.ts - trackStart) / totalMs) * 100)
   }))
 
-  const boundaries = [entry.start_time, ...entry.pausePoints.map((p) => p.ts), trackEnd]
+  const boundaries = [trackStart, ...entry.pausePoints.map((p) => p.ts), trackEnd]
   entry.timelineSlices = []
   for (let i = 0; i < boundaries.length - 1; i += 1) {
     const sliceStart = boundaries[i]
@@ -410,7 +584,7 @@ function decorateEntryTimeline(entry, tagMap) {
     if (sliceEnd <= sliceStart) continue
     const fromPoint = i === 0 ? null : entry.pausePoints[i - 1]
     const sliceTag = tagMap.get(fromPoint?.tag_id) || tagMap.get(entry.tag_id) || { name: '未分类', color: '#9D9D9D' }
-    const left = clampPct(((sliceStart - entry.start_time) / totalMs) * 100)
+    const left = clampPct(((sliceStart - trackStart) / totalMs) * 100)
     const width = Math.max(1.2, clampPct(((sliceEnd - sliceStart) / totalMs) * 100))
     entry.timelineSlices.push({
       key: `${entry.id}-${i}-${sliceStart}`,
@@ -497,6 +671,8 @@ function fillEditForm(s) {
   editForm.value = {
     tagId: s.tag_id,
     detail: s.detail || '',
+    startValue: toDateTimeInput(s.start_time),
+    endValue: s.end_time ? toDateTimeInput(s.end_time) : '',
     pausePoints: (s.pausePoints || []).map((p) => ({
       id: p.id,
       timeText: p.timeText,
@@ -530,7 +706,16 @@ function closeEdit() {
 }
 async function saveEdit() {
   if (!editEntry.value) return
+  try {
   const detail = editForm.value.detail.trim() || null
+  if (editEntry.value.end_time) {
+    const startTime = fromDateTimeInput(editForm.value.startValue)
+    const endTime = fromDateTimeInput(editForm.value.endValue)
+    if (startTime == null || endTime == null) return alert('请填写有效的开始和结束时间')
+    if (startTime !== editEntry.value.start_time || endTime !== editEntry.value.end_time) {
+      await api('ledger:adjustTime', { id: editEntry.value.id, startTime, endTime })
+    }
+  }
   if (!editForm.value.pausePoints.length) {
     const r = await api('ledger:retag', {
       id: editEntry.value.id,
@@ -557,6 +742,40 @@ async function saveEdit() {
   expandedEntryId.value = null
   editEntry.value = null
   await load()
+  } catch (err) {
+    alert(err.message || '保存失败')
+  }
+}
+
+function openManualCreate() {
+  const base = startOfDay(curDate.value) + WORK_START_HOUR * 3600 * 1000
+  manualForm.value = {
+    startValue: toDateTimeInput(base),
+    endValue: toDateTimeInput(base + 30 * 60 * 1000),
+    tagId: tags.value[0]?.id ?? null,
+    detail: ''
+  }
+  manualOpen.value = true
+}
+function closeManualCreate() {
+  manualOpen.value = false
+}
+async function saveManualCreate() {
+  try {
+    const startTime = fromDateTimeInput(manualForm.value.startValue)
+    const endTime = fromDateTimeInput(manualForm.value.endValue)
+    if (startTime == null || endTime == null) return alert('请填写有效的开始和结束时间')
+    await api('ledger:manualCreate', {
+      startTime,
+      endTime,
+      tagId: manualForm.value.tagId,
+      detail: manualForm.value.detail.trim() || null
+    })
+    manualOpen.value = false
+    await load({ focusWorkStart: true })
+  } catch (err) {
+    alert(err.message || '保存补记失败')
+  }
 }
 
 let off = null
@@ -612,6 +831,14 @@ onBeforeUnmount(() => {
 .clip-time { position: relative; z-index: 1; display: inline; margin-left: 5px; font-size: 10px; opacity: .72; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .clip.micro .clip-label,
 .clip.micro .clip-time { opacity: 0; }
+.clip.adjustable { cursor: pointer; }
+.clip.resizing { filter: brightness(1.12); outline: 1px solid rgba(255,255,255,.52); box-shadow: 0 0 0 1px rgba(255,255,255,.18), 0 8px 24px rgba(0,0,0,.22); }
+.clip.snap { outline-color: var(--gold); box-shadow: 0 0 0 1px rgba(224,188,114,.48), 0 0 18px rgba(224,188,114,.28); }
+.clip-resize { position: absolute; top: 0; bottom: 0; width: 8px; z-index: 3; cursor: ew-resize; opacity: 0; transition: opacity .12s ease, background .12s ease; }
+.clip-resize.left { left: 0; border-radius: 7px 0 0 7px; }
+.clip-resize.right { right: 0; border-radius: 0 7px 7px 0; }
+.clip:hover .clip-resize { opacity: 1; background: rgba(255,255,255,.22); }
+.clip-resize:hover { background: rgba(255,255,255,.34) !important; }
 .cut-marker { position: absolute; top: 36px; height: 118px; width: 1px; padding: 0; border: 0; border-left: 1px dashed rgba(224,188,114,0.48); background: transparent; color: var(--gold); cursor: pointer; font-size: 10px; opacity: .88; }
 .cut-marker::after { content: ''; position: absolute; left: -4px; top: -4px; width: 7px; height: 7px; transform: rotate(45deg); border-radius: 1px; background: var(--gold); }
 .cut-marker span { position: absolute; left: 8px; top: -9px; opacity: 0; white-space: nowrap; padding: 1px 5px; border-radius: 999px; background: rgba(32,35,41,.96); color: var(--gold); border: 1px solid rgba(224,188,114,.36); pointer-events: none; transition: opacity .12s ease; }
@@ -638,6 +865,7 @@ onBeforeUnmount(() => {
 .seg-dur { font-size: 13px; font-weight: 500; }
 .frag { font-size: 12px; }
 .pause-chip { font-size: 12px; color: var(--gold); background: rgba(224,188,114,0.12); border: 1px solid rgba(224,188,114,0.28); padding: 1px 7px; border-radius: 999px; }
+.cross-chip { font-size: 12px; color: var(--green); background: rgba(127,169,140,0.12); border: 1px solid rgba(127,169,140,0.28); padding: 1px 7px; border-radius: 999px; }
 .entry-track {
   position: relative;
   height: 38px;
@@ -715,6 +943,10 @@ onBeforeUnmount(() => {
   0% { opacity: 0; transform: translateY(-6px); }
   100% { opacity: 1; transform: translateY(0); }
 }
+.time-calibrate { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.time-calibrate label,
+.manual-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-dim); }
+.time-input { font-family: var(--font-mono); }
 .edit-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .edit-tag {
   padding: 5px 12px;
@@ -735,4 +967,10 @@ onBeforeUnmount(() => {
 .pause-select { width: 130px; }
 .pause-detail { flex: 1; min-width: 160px; }
 .edit-ops { display: flex; justify-content: flex-end; gap: 8px; }
+.manual-mask { position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,.48); display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(8px); }
+.manual-card { width: min(560px, 100%); padding: 18px; }
+.manual-head { margin-bottom: 14px; }
+.manual-head h3 { font-size: 17px; font-weight: 500; margin: 0 0 4px; color: var(--gold); }
+.manual-grid { display: grid; gap: 12px; }
+.manual-grid textarea { resize: vertical; font-family: inherit; }
 </style>

@@ -62,6 +62,54 @@ describe('ledger 状态机', () => {
     expect(r.ok).toBe(false)
   })
 
+  it('可事后校准已完成记录的开始和结束时间', () => {
+    const base = 1786300000000
+    const entry = entriesRepo.insertFinished({
+      startTime: base,
+      endTime: base + 30 * 60 * 1000,
+      durationSec: 30 * 60,
+      tagId: 1,
+      isFragment: 0
+    })
+    const r = ledger.adjustTime({ id: entry.id, startTime: base - 10 * 60 * 1000, endTime: base + 20 * 60 * 1000 })
+    expect(r.ok).toBe(true)
+    expect(r.entry.start_time).toBe(base - 10 * 60 * 1000)
+    expect(r.entry.end_time).toBe(base + 20 * 60 * 1000)
+    expect(r.entry.duration_sec).toBe(30 * 60)
+  })
+
+  it('补记记录会阻止与已有台账重叠', () => {
+    const base = 1786300000000
+    entriesRepo.insertFinished({ startTime: base, endTime: base + 3600 * 1000, durationSec: 3600, tagId: 1 })
+    const r1 = ledger.manualCreate({ startTime: base + 3600 * 1000, endTime: base + 5400 * 1000, tagId: 2, detail: '补记会议' })
+    expect(r1.ok).toBe(true)
+    const r2 = ledger.manualCreate({ startTime: base + 30 * 60 * 1000, endTime: base + 90 * 60 * 1000, tagId: 2 })
+    expect(r2.ok).toBe(false)
+    expect(r2.error).toContain('重叠')
+  })
+
+  it('校准时间时阻止已有节点越界', () => {
+    const base = 1786300000000
+    const entry = entriesRepo.insertFinished({ startTime: base, endTime: base + 3600 * 1000, durationSec: 3600, tagId: 1 })
+    pausePointsRepo.insert({ entryId: entry.id, ts: base + 50 * 60 * 1000, tagId: 1 })
+    const r = ledger.adjustTime({ id: entry.id, startTime: base, endTime: base + 40 * 60 * 1000 })
+    expect(r.ok).toBe(false)
+    expect(r.error).toContain('时间节点')
+  })
+
+  it('校准和补记均不允许未来时间', () => {
+    const now = 1786300000000
+    vi.useFakeTimers()
+    vi.setSystemTime(now)
+    const entry = entriesRepo.insertFinished({ startTime: now - 3600 * 1000, endTime: now - 1800 * 1000, durationSec: 1800, tagId: 1 })
+    const r1 = ledger.adjustTime({ id: entry.id, startTime: now - 3600 * 1000, endTime: now + 1000 })
+    expect(r1.ok).toBe(false)
+    expect(r1.error).toContain('当前时间')
+    const r2 = ledger.manualCreate({ startTime: now + 1000, endTime: now + 2000, tagId: 1 })
+    expect(r2.ok).toBe(false)
+    expect(r2.error).toContain('当前时间')
+  })
+
   it('pause 不归档旧段，只写暂停点并进入暂停态', async () => {
     await ledger.start({ tagId: 1 })
     const r = await ledger.pause()
@@ -312,6 +360,24 @@ describe('report 聚合', () => {
     expect(dist.length).toBe(1)
     expect(dist[0].count).toBe(2)
     expect(dist[0].totalSec).toBe(2 * 3600)
+  })
+
+  it('跨天记录按日视图查询并按当天窗口裁剪统计', () => {
+    const dayStart = new Date(2026, 7, 13, 0, 0, 0, 0).getTime()
+    const entry = entriesRepo.insert({ startTime: dayStart - 2 * 3600 * 1000, tagId: 1 })
+    entriesRepo.finish(entry.id, {
+      endTime: dayStart + 3 * 3600 * 1000,
+      durationSec: 5 * 3600,
+      tagId: 1,
+      detail: null,
+      windowTitle: null,
+      isFragment: 0
+    })
+    const list = entriesRepo.listByRange(dayStart, dayStart + 24 * 3600 * 1000)
+    expect(list.length).toBe(1)
+    expect(report.effectiveHours(dayStart)).toBe(3 * 3600)
+    const dist = report.tagDistribution(dayStart, dayStart + 24 * 3600 * 1000)
+    expect(dist[0].totalSec).toBe(3 * 3600)
   })
 
   it('空数据返回空数组与 0', () => {

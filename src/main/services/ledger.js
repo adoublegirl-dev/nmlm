@@ -1,5 +1,5 @@
 // 台账状态机：兼容旧 start/stop，同时支持任务播放器 switchTask / complete / pausePoint。
-const { getDb, entriesRepo, tagsRepo, pausePointsRepo } = require('../db')
+const { getDb, entriesRepo, tagsRepo, pausePointsRepo, ledgerRevisionsRepo } = require('../db')
 const { FRAGMENT_THRESHOLD_SEC } = require('../../shared/constants')
 const winUtil = require('../utils/window')
 
@@ -37,6 +37,28 @@ function validTagId(tagId) {
   if (tagId == null) return null
   const t = tagsRepo.get(tagId)
   return t ? tagId : null
+}
+
+function normalizeTimeRange({ startTime, endTime, now = Date.now() }) {
+  const s = Number(startTime)
+  const e = Number(endTime)
+  if (!Number.isFinite(s) || !Number.isFinite(e)) return { ok: false, error: '时间格式不正确' }
+  if (s > now || e > now) return { ok: false, error: '开始/结束时间不能晚于当前时间' }
+  if (e <= s) return { ok: false, error: '结束时间必须晚于开始时间' }
+  return { ok: true, startTime: s, endTime: e, durationSec: Math.max(0, Math.floor((e - s) / 1000)) }
+}
+
+function assertNoOverlap(startTime, endTime, { excludeId = null } = {}) {
+  const overlaps = entriesRepo.overlapping(startTime, endTime, { excludeId })
+  if (overlaps.length) {
+    const first = overlaps[0]
+    return { ok: false, error: `时间与已有记录重叠（#${first.id}），请先调整时间` }
+  }
+  return { ok: true }
+}
+
+function isFragmentByDuration(durationSec) {
+  return durationSec < FRAGMENT_THRESHOLD_SEC ? 1 : 0
 }
 
 async function finishEntry(entry, { tagId, detail, endTime = Date.now(), state = 'idle' } = {}) {
@@ -170,6 +192,50 @@ function retag(id, { tagId = null, detail = null } = {}) {
   if (!entry) return { ok: false, error: '记录不存在' }
   const updated = entriesRepo.updateMeta(id, { tagId: validTagId(tagId), detail: detail !== null ? detail : entry.detail })
   return { ok: true, entry: updated }
+}
+
+function adjustTime({ id, startTime, endTime } = {}) {
+  const entry = entriesRepo.get(id)
+  if (!entry) return { ok: false, error: '记录不存在' }
+  if (!entry.end_time) return { ok: false, error: '进行中的记录请先完成，再校准时间' }
+  const range = normalizeTimeRange({ startTime, endTime })
+  if (!range.ok) return range
+  const overlap = assertNoOverlap(range.startTime, range.endTime, { excludeId: entry.id })
+  if (!overlap.ok) return overlap
+  const points = pausePointsRepo.listByEntry(entry.id)
+  const outPoint = points.find((p) => p.ts <= range.startTime || p.ts >= range.endTime)
+  if (outPoint) return { ok: false, error: '已有时间节点超出新的起止范围，请先调整切点或拆分记录' }
+  const before = { ...entry, pausePoints: points }
+  const updated = entriesRepo.updateTime(entry.id, {
+    startTime: range.startTime,
+    endTime: range.endTime,
+    durationSec: range.durationSec,
+    isFragment: isFragmentByDuration(range.durationSec)
+  })
+  ledgerRevisionsRepo.insert({ entryId: entry.id, action: 'adjust_time', before, after: updated })
+  emit('time-adjusted', updated)
+  return { ok: true, entry: updated }
+}
+
+function manualCreate({ startTime, endTime, tagId = null, detail = null } = {}) {
+  const finalTagId = validTagId(tagId)
+  if (tagId != null && finalTagId == null) return { ok: false, error: '标签不存在' }
+  const range = normalizeTimeRange({ startTime, endTime })
+  if (!range.ok) return range
+  const overlap = assertNoOverlap(range.startTime, range.endTime)
+  if (!overlap.ok) return overlap
+  const entry = entriesRepo.insertFinished({
+    startTime: range.startTime,
+    endTime: range.endTime,
+    durationSec: range.durationSec,
+    tagId: finalTagId,
+    detail,
+    windowTitle: '[人工补记]',
+    isFragment: isFragmentByDuration(range.durationSec)
+  })
+  ledgerRevisionsRepo.insert({ entryId: entry.id, action: 'manual_create', before: null, after: entry })
+  emit('manual-created', entry)
+  return { ok: true, entry }
 }
 
 function addPausePoint({ detail = null } = {}) {
@@ -323,6 +389,8 @@ module.exports = {
   current,
   listByRange,
   retag,
+  adjustTime,
+  manualCreate,
   addPausePoint,
   listPausePointsByRange,
   applyPausePointTag,

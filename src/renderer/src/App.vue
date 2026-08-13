@@ -207,9 +207,11 @@ onBeforeUnmount(() => {
   border-bottom: 0.5px solid var(--border);
   background: color-mix(in srgb, var(--bg-panel-solid) 72%, transparent);
   backdrop-filter: blur(18px) saturate(1.18);
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 10;
+  left: 0;
+  right: 0;
+  z-index: 50;
   box-shadow: 0 10px 32px rgba(0,0,0,.12);
 }
 .brand { font-weight: 700; color: var(--gold); letter-spacing: 1px; text-shadow: 0 1px 14px rgba(0,0,0,.28); }
@@ -264,7 +266,7 @@ onBeforeUnmount(() => {
   flex: 1;
   position: relative;
   isolation: isolate;
-  padding: 24px;
+  padding: 88px 24px 24px;
   max-width: 1120px;
   width: 100%;
   margin: 0 auto;

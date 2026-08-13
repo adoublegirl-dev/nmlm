@@ -120,6 +120,22 @@ const MIGRATIONS = [
       ALTER TABLE todos ADD COLUMN snooze_until INTEGER;
       CREATE INDEX IF NOT EXISTS idx_todos_snooze ON todos(snooze_until);
     `
+  },
+  {
+    version: 5,
+    name: 'ledger-revisions',
+    sql: `
+      CREATE TABLE IF NOT EXISTS ledger_revisions (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        entry_id       INTEGER REFERENCES time_entries(id),
+        action         TEXT NOT NULL,
+        before_json    TEXT,
+        after_json     TEXT,
+        created_at     INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_ledger_revisions_entry ON ledger_revisions(entry_id);
+      CREATE INDEX IF NOT EXISTS idx_ledger_revisions_created ON ledger_revisions(created_at);
+    `
   }
 ]
 

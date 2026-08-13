@@ -79,6 +79,8 @@ function registerAll() {
   })
   registerHandler(IPC.LEDGER_RECOVER, () => ({ ok: true, recovered: ledger.recover() }))
   registerHandler(IPC.LEDGER_RETAG, (a) => ledger.retag(a.id, a))
+  registerHandler(IPC.LEDGER_ADJUST_TIME, (a) => ledger.adjustTime(a))
+  registerHandler(IPC.LEDGER_MANUAL_CREATE, (a) => ledger.manualCreate(a))
 
   // tags
   registerHandler(IPC.TAGS_LIST, () => ({ ok: true, tags: tagsRepo.all() }))

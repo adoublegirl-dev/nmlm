@@ -87,9 +87,11 @@ const entriesRepo = {
     return this.get(id)
   },
   listByRange(start, end) {
+    // 查询与 [start, end) 有交集的记录，而不是只查 start_time 落在范围内的记录。
+    // 这样跨天记录在前后两天的日视图里都能被投影展示，但原始记录不被拆分。
     return getDb()
-      .prepare('SELECT * FROM time_entries WHERE start_time >= ? AND start_time < ? ORDER BY start_time')
-      .all(start, end)
+      .prepare('SELECT * FROM time_entries WHERE start_time < ? AND COALESCE(end_time, ?) > ? ORDER BY start_time')
+      .all(end, Date.now(), start)
   },
   allUnfinished() {
     return getDb().prepare('SELECT * FROM time_entries WHERE end_time IS NULL ORDER BY start_time').all()
@@ -100,6 +102,21 @@ const entriesRepo = {
       .run(tagId, detail, id)
     return this.get(id)
   },
+  updateTime(id, { startTime, endTime, durationSec, isFragment }) {
+    getDb()
+      .prepare('UPDATE time_entries SET start_time = ?, end_time = ?, duration_sec = ?, is_fragment = ? WHERE id = ?')
+      .run(startTime, endTime, durationSec, isFragment, id)
+    return this.get(id)
+  },
+  overlapping(start, end, { excludeId = null, now = Date.now() } = {}) {
+    const params = [end, now, start]
+    let sql = 'SELECT * FROM time_entries WHERE start_time < ? AND COALESCE(end_time, ?) > ?'
+    if (excludeId != null) {
+      sql += ' AND id != ?'
+      params.push(excludeId)
+    }
+    return getDb().prepare(sql + ' ORDER BY start_time').all(...params)
+  },
   remove(id) {
     getDb().prepare('DELETE FROM time_entries WHERE id = ?').run(id)
     return { ok: true }
@@ -107,6 +124,18 @@ const entriesRepo = {
 }
 
 // ---------- 暂停点仓储 ----------
+const ledgerRevisionsRepo = {
+  insert({ entryId = null, action, before = null, after = null }) {
+    const info = getDb()
+      .prepare('INSERT INTO ledger_revisions (entry_id, action, before_json, after_json, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(entryId, action, before == null ? null : JSON.stringify(before), after == null ? null : JSON.stringify(after), Date.now())
+    return getDb().prepare('SELECT * FROM ledger_revisions WHERE id = ?').get(info.lastInsertRowid)
+  },
+  listByEntry(entryId) {
+    return getDb().prepare('SELECT * FROM ledger_revisions WHERE entry_id = ? ORDER BY created_at DESC').all(entryId)
+  }
+}
+
 const pausePointsRepo = {
   insert({ entryId = null, ts = Date.now(), detail = null, tagId = null }) {
     const info = getDb()
@@ -267,4 +296,4 @@ const settingsRepo = {
   }
 }
 
-module.exports = { init, getDb, tagsRepo, entriesRepo, pausePointsRepo, todosRepo, screenshotsRepo, packsRepo, activityRepo, settingsRepo }
+module.exports = { init, getDb, tagsRepo, entriesRepo, ledgerRevisionsRepo, pausePointsRepo, todosRepo, screenshotsRepo, packsRepo, activityRepo, settingsRepo }

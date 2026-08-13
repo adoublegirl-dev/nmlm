@@ -12,6 +12,13 @@ function withTag(entry) {
   }
 }
 
+function clippedSec(entry, start, end, now = Date.now()) {
+  const actualEnd = entry.end_time || now
+  const s = Math.max(entry.start_time, start)
+  const e = Math.min(actualEnd, end)
+  return Math.max(0, Math.floor((e - s) / 1000))
+}
+
 // 今日时间线（甘特条数据）
 function dailyTimeline(date) {
   const { start, end } = dayRangeOf(date)
@@ -30,7 +37,7 @@ function tagDistribution(start, end) {
     const key = e.tagName
     if (!map.has(key)) map.set(key, { name: key, color: e.color, totalSec: 0, count: 0 })
     const item = map.get(key)
-    item.totalSec += e.duration_sec || 0
+    item.totalSec += clippedSec(e, start, end)
     item.count += 1
   }
   return [...map.values()].sort((a, b) => b.totalSec - a.totalSec)
@@ -45,10 +52,10 @@ function dailyTrend(monthStart) {
     if (ts > now) break
     const { start, end } = dayRangeOf(ts)
     const entries = entriesRepo.listByRange(start, end).map(withTag)
-    const totalSec = entries.reduce((s, e) => s + (e.duration_sec || 0), 0)
+    const totalSec = entries.reduce((sum, e) => sum + clippedSec(e, start, end, now), 0)
     const effectiveSec = entries
       .filter((e) => !e.isBreak)
-      .reduce((s, e) => s + (e.duration_sec || 0), 0)
+      .reduce((sum, e) => sum + clippedSec(e, start, end, now), 0)
     const fragmentCount = entries.filter((e) => e.is_fragment).length
     if (entries.length === 0) continue
     days.push({ date: formatDate(ts), totalSec, effectiveSec, fragmentCount })
@@ -60,16 +67,17 @@ function dailyTrend(monthStart) {
 function effectiveHours(date) {
   const { start, end } = dayRangeOf(date)
   const entries = entriesRepo.listByRange(start, end).map(withTag)
-  return entries.filter((e) => !e.isBreak).reduce((s, e) => s + (e.duration_sec || 0), 0)
+  return entries.filter((e) => !e.isBreak).reduce((sum, e) => sum + clippedSec(e, start, end), 0)
 }
 
 // 碎片统计
 function fragmentStats(date) {
+  const { start, end } = dayRangeOf(date)
   const entries = dailyTimeline(date)
   const fragments = entries.filter((e) => e.is_fragment)
   return {
     fragmentCount: fragments.length,
-    fragmentTotalSec: fragments.reduce((s, e) => s + (e.duration_sec || 0), 0),
+    fragmentTotalSec: fragments.reduce((sum, e) => sum + clippedSec(e, start, end), 0),
     entryCount: entries.length
   }
 }
