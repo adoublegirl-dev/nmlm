@@ -24,6 +24,38 @@ function evidenceLibraryDir() {
   if (cfg) return path.join(cfg, '牛马联盟证据库')
   return path.join(app.getPath('userData'), '牛马联盟证据库')
 }
+function evidenceLibraryStatus() {
+  const configuredBase = settings.get('evidence.dir') || null
+  const root = evidenceLibraryDir()
+  const exists = fs.existsSync(root)
+  let writable = false
+  let error = null
+  if (exists) {
+    try { fs.accessSync(root, fs.constants.R_OK | fs.constants.W_OK); writable = true } catch (e) { error = e.message }
+  } else if (configuredBase) {
+    error = '已配置的证据库路径不存在或磁盘未连接'
+  }
+  return { ok: exists && writable, root, configuredBase, exists, writable, error, requiresRelocate: !!configuredBase && !exists }
+}
+function writeLibraryMarker(root) {
+  const systemDir = path.join(root, '_system')
+  fs.mkdirSync(systemDir, { recursive: true })
+  const marker = path.join(systemDir, 'library.json')
+  if (!fs.existsSync(marker)) fs.writeFileSync(marker, JSON.stringify({ type: 'nmlm-evidence-library', version: 1, createdAt: Date.now() }, null, 2), 'utf8')
+}
+function assertLibraryAvailable({ allowCreateDefault = true } = {}) {
+  const status = evidenceLibraryStatus()
+  if (status.ok) return status
+  if (!status.configuredBase && allowCreateDefault) {
+    fs.mkdirSync(status.root, { recursive: true })
+    writeLibraryMarker(status.root)
+    return evidenceLibraryStatus()
+  }
+  const err = new Error(status.error || '证据库不可用')
+  err.code = 'EVIDENCE_LIBRARY_UNAVAILABLE'
+  err.details = status
+  throw err
+}
 
 // 兼容旧 server/index.js 的 /shots 静态目录命名。
 function screenshotsDir() {
@@ -63,12 +95,14 @@ function fileDirs(ts) {
 }
 
 function ensureLibraryDirs(ts = Date.now()) {
-  const root = evidenceLibraryDir()
+  const available = assertLibraryAvailable({ allowCreateDefault: true })
+  const root = available.root
   const dirs = captureDirs(ts)
   const fdirs = fileDirs(ts)
   for (const dir of [root, path.join(root, '_system'), path.join(root, 'inbox', 'manual-upload'), path.join(root, 'inbox', 'agent-import'), dirs.raw, dirs.meta, dirs.thumbs, fdirs.raw, fdirs.meta, fdirs.extracted]) {
     fs.mkdirSync(dir, { recursive: true })
   }
+  writeLibraryMarker(root)
   return dirs
 }
 
@@ -553,8 +587,73 @@ async function migrateLibraryWithDialog() {
   if (confirmed.response !== 0) return { ok: true, canceled: true }
   const resultCopy = copyDirVerified(currentLibrary, targetLibrary)
   settings.set('evidence.dir', baseDir)
+  evidenceRepo.rebasePaths(targetLibrary)
   ensureLibraryDirs(Date.now())
   return { ok: true, ...plan, ...resultCopy, evidenceDir: baseDir }
+}
+
+function resolvePickedLibrary(picked) {
+  if (path.basename(picked) === '牛马联盟证据库') return picked
+  const child = path.join(picked, '牛马联盟证据库')
+  return fs.existsSync(child) ? child : null
+}
+async function relocateExistingLibrary() {
+  const result = await dialog.showOpenDialog({ title: '选择已有的牛马联盟证据库', properties: ['openDirectory'] })
+  if (result.canceled || !result.filePaths.length) return { ok: true, canceled: true }
+  const root = resolvePickedLibrary(result.filePaths[0])
+  if (!root || !fs.existsSync(root)) return { ok: false, error: '所选目录不是有效的牛马联盟证据库' }
+  const hasStructure = fs.existsSync(path.join(root, 'captures')) || fs.existsSync(path.join(root, 'files')) || fs.existsSync(path.join(root, '_system'))
+  if (!hasStructure) return { ok: false, error: '目录中没有发现证据库结构' }
+  const baseDir = path.dirname(root)
+  settings.set('evidence.dir', baseDir)
+  writeLibraryMarker(root)
+  const rebased = evidenceRepo.rebasePaths(root)
+  const rebuilt = rebuildIndexFromMeta(root)
+  return { ok: true, root, evidenceDir: baseDir, rebased, ...rebuilt }
+}
+function rebuildIndexFromMeta(root = evidenceLibraryDir()) {
+  if (!fs.existsSync(root)) return { ok: false, error: '证据库不存在' }
+  const metaFiles = walkFiles(root).filter((p) => path.basename(path.dirname(p)) === 'meta' && p.toLowerCase().endsWith('.json'))
+  let inserted = 0
+  let skipped = 0
+  const errors = []
+  for (const metaPath of metaFiles) {
+    try {
+      const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'))
+      const id = meta.evidence_id || path.basename(metaPath, '.json')
+      if (!id || evidenceRepo.get(id)) { skipped += 1; continue }
+      let relativePath = meta.relative_path ? String(meta.relative_path).replace(/\\/g, '/') : null
+      let rawPath = relativePath ? path.join(root, ...relativePath.split('/')) : null
+      if (!rawPath || !fs.existsSync(rawPath)) {
+        const rawDir = path.join(path.dirname(path.dirname(metaPath)), 'raw')
+        const originalName = path.basename(meta.original_path || '')
+        if (originalName && fs.existsSync(path.join(rawDir, originalName))) rawPath = path.join(rawDir, originalName)
+        else {
+          const candidates = fs.existsSync(rawDir) ? fs.readdirSync(rawDir).map((x) => path.join(rawDir, x)).filter((x) => fs.statSync(x).isFile()) : []
+          rawPath = candidates.find((x) => meta.sha256 && path.basename(x).includes(String(meta.sha256).slice(0, 8))) || null
+        }
+      }
+      if (!rawPath || !fs.existsSync(rawPath)) throw new Error('找不到对应 raw 原件')
+      relativePath = path.relative(root, rawPath).split(path.sep).join('/')
+      const stat = fs.statSync(rawPath)
+      const info = detectFileType(rawPath)
+      const isCapture = relativePath.startsWith('captures/')
+      const capturedAt = meta.captured_at || null
+      const importedAt = meta.imported_at || capturedAt || stat.mtimeMs || Date.now()
+      const type = meta.type || (isCapture ? 'screenshot' : info.type)
+      const unsupported = ['audio', 'video', 'archive', 'unknown'].includes(type)
+      evidenceRepo.insert({
+        id, type, source: isCapture ? 'screenshot' : 'recovered_meta', status: meta.status || (unsupported ? 'unsupported' : isCapture ? 'captured' : 'imported'),
+        originalPath: rawPath, relativePath, sha256: meta.sha256 || sha256File(rawPath), sizeBytes: meta.size_bytes || stat.size,
+        mimeType: meta.mime_type || info.mimeType, createdAt: capturedAt || meta.imported_at || stat.mtimeMs || Date.now(), importedAt,
+        capturedAt, deviceId: meta.hostname || null, ledgerEntryId: meta.ledger_entry_id || null, tagId: meta.tag_id || null,
+        title: meta.original_filename || (isCapture ? '屏幕截图' : path.basename(rawPath)), unsupportedReason: meta.unsupported_reason || null
+      })
+      for (const [key, value] of Object.entries(meta)) evidenceRepo.insertMetadata(id, key, value)
+      inserted += 1
+    } catch (e) { errors.push({ metaPath, error: e.message }) }
+  }
+  return { ok: true, scanned: metaFiles.length, inserted, skipped, errors }
 }
 
 function evidenceTime(item) {
@@ -639,6 +738,9 @@ module.exports = {
   pack,
   packStatus,
   migrateLibraryWithDialog,
+  relocateExistingLibrary,
+  rebuildIndexFromMeta,
+  evidenceLibraryStatus,
   exportMarkdown,
   openEvidenceFolder,
   openScreenshotsDir,

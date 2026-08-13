@@ -159,7 +159,7 @@
 
     <div class="card section">
       <h3>关于</h3>
-      <div class="row"><span class="muted">版本</span><code>0.1.0 (P0)</code></div>
+      <div class="row"><span class="muted">版本</span><code>{{ appVersion || '…' }}</code></div>
       <div class="row"><span class="muted">协议</span><span>MIT · 开源 · 数据全本地</span></div>
       <div class="row"><span class="muted">数据目录</span><code>{{ userData }}</code></div>
     </div>
@@ -175,6 +175,7 @@ import { api } from '../api'
 const urls = ref({})
 const token = ref('')
 const userData = ref('')
+const appVersion = ref('')
 const shortcuts = ref({})
 const reminder = ref({})
 const evidence = ref({})
@@ -210,6 +211,7 @@ async function load() {
   urls.value = info.urls || urls.value
   token.value = info.token || token.value
   userData.value = info.userData || ''
+  appVersion.value = info.version || ''
   const tagRes = await api('tags:list')
   tags.value = tagRes.tags || []
   await loadMcpConfig()

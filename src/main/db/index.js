@@ -6,10 +6,16 @@ let db = null
 
 function init(dbPath) {
   db = new Database(dbPath)
-  db.pragma('journal_mode = WAL')
-  db.pragma('foreign_keys = ON')
-  migrate(db)
-  return db
+  try {
+    db.pragma('journal_mode = WAL')
+    db.pragma('foreign_keys = ON')
+    migrate(db)
+    return db
+  } catch (e) {
+    try { db.close() } catch (_) {}
+    db = null
+    throw e
+  }
 }
 
 function getDb() {
@@ -304,6 +310,18 @@ const evidenceRepo = {
     vals.push(id)
     getDb().prepare(`UPDATE evidence_items SET ${fields.join(', ')} WHERE id = ?`).run(...vals)
     return this.get(id)
+  },
+  all() {
+    return getDb().prepare('SELECT * FROM evidence_items WHERE is_deleted = 0 ORDER BY COALESCE(captured_at, imported_at, created_at) DESC').all()
+  },
+  rebasePaths(rootDir) {
+    const rows = getDb().prepare('SELECT id, relative_path FROM evidence_items').all()
+    const update = getDb().prepare('UPDATE evidence_items SET original_path = ? WHERE id = ?')
+    const tx = getDb().transaction(() => {
+      for (const row of rows) update.run(require('path').join(rootDir, ...String(row.relative_path).split('/')), row.id)
+    })
+    tx()
+    return rows.length
   },
   listByRange(start, end) {
     return getDb()

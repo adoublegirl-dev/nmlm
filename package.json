@@ -1,7 +1,7 @@
 {
   "name": "niuma-panel",
   "productName": "牛马联盟",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "打工人时间台账与加班证据记录仪",
   "main": "src/main/index.js",
   "license": "MIT",
@@ -21,7 +21,8 @@
     "mcp:utf8": "powershell -ExecutionPolicy Bypass -NoProfile -File ./scripts/mcp.ps1",
     "junction": "powershell -ExecutionPolicy Bypass -NoProfile -File ./scripts/create-junction.ps1",
     "dist": "npm run build:renderer && electron-builder",
-    "dist:release": "powershell -ExecutionPolicy Bypass -NoProfile -File ./scripts/release.ps1"
+    "release:preflight": "node scripts/release-preflight.js",
+    "dist:release": "npm run release:preflight && powershell -ExecutionPolicy Bypass -NoProfile -File ./scripts/release.ps1"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

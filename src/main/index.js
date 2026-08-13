@@ -1,5 +1,5 @@
 // 主进程入口：生命周期、单实例、服务装配。
-const { app, shell } = require('electron')
+const { app, shell, dialog } = require('electron')
 const path = require('path')
 const crypto = require('crypto')
 const { IPC } = require('../shared/constants')
@@ -27,11 +27,27 @@ if (!gotLock) {
     const todoReminder = require('./services/todoReminder')
     const overtimeEvidenceReminder = require('./services/overtimeEvidenceReminder')
     const ipc = require('./ipc')
+    const lifecycle = require('./services/lifecycle')
 
-    // 1. 数据库
-    db.init(path.join(app.getPath('userData'), 'niuma.db'))
+    // 1. 生命周期预检 + 数据库迁移。升级前先备份，降级写入直接阻止。
+    const userData = app.getPath('userData')
+    const dbPath = path.join(userData, 'niuma.db')
+    let lifecycleContext = null
+    try {
+      lifecycleContext = await lifecycle.prepare({ userData, dbPath, appVersion: app.getVersion() })
+      const database = db.init(dbPath)
+      lifecycle.finalize(database, lifecycleContext)
+    } catch (e) {
+      if (lifecycleContext?.backup?.id) lifecycle.scheduleRestore(userData, lifecycleContext.backup.id)
+      dialog.showErrorBox('牛马联盟启动保护', `${e.message}\n\n程序已停止写入。${lifecycleContext?.backup ? '升级前备份已保留，可在修复后恢复。' : ''}`)
+      app.quit()
+      return
+    }
 
     // 2. 初始化运行时设置（token + 快捷键规范化）
+    if (lifecycleContext.mode === 'upgrade' && settings.get('onboarding.completed') !== true) settings.set('onboarding.completed', true)
+    settings.set('install.lastStartMode', lifecycleContext.mode)
+    settings.set('install.currentVersion', app.getVersion())
     ensureRuntimeToken(settings)
     normalizeShortcutSettings(settings)
 
@@ -53,6 +69,16 @@ if (!gotLock) {
     if (settings.get('onboarding.completed') !== true) {
       shell.openExternal(`http://127.0.0.1:${actualPort}/panel.html#settings`)
     }
+    const evidenceService = require('./services/evidence')
+    if (!settings.get('evidence.dir')) evidenceService.ensureLibraryDirs(Date.now())
+    const evidenceStatus = evidenceService.evidenceLibraryStatus()
+    if (evidenceStatus.requiresRelocate) {
+      const { Notification } = require('electron')
+      const notice = new Notification({ title: '牛马联盟 · 证据库未连接', body: '已停止向失联路径写入。请在设置中重新定位已有证据库。' })
+      notice.on('click', () => shell.openExternal(`http://127.0.0.1:${actualPort}/panel.html#settings`))
+      notice.show()
+    }
+    if (settings.get('update.autoCheck')) require('./services/updater').check().catch(() => {})
 
     // 6. 托盘 + 独立记录器（是否自动显示由设置控制）
     const actions = buildActions()

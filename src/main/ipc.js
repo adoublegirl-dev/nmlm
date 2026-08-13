@@ -96,6 +96,9 @@ function registerAll() {
   registerHandler(IPC.EVIDENCE_OPEN_FOLDER, (a) => evidence.openEvidenceFolder(a))
   registerHandler(IPC.EVIDENCE_DELETE, (a) => evidence.removeEvidence(a))
   registerHandler(IPC.EVIDENCE_MIGRATE_DIR, (a) => evidence.migrateLibraryWithDialog(a))
+  registerHandler(IPC.EVIDENCE_RELOCATE, () => evidence.relocateExistingLibrary())
+  registerHandler(IPC.EVIDENCE_REBUILD_INDEX, () => evidence.rebuildIndexFromMeta())
+  registerHandler(IPC.EVIDENCE_STATUS, () => ({ ok: true, ...evidence.evidenceLibraryStatus() }))
   registerHandler(IPC.EVIDENCE_EXPORT_MARKDOWN, (a) => evidence.exportMarkdown(a))
   registerHandler(IPC.EVIDENCE_PACK, (a) => evidence.pack(a))
   registerHandler(IPC.EVIDENCE_PACK_STATUS, () => ({ ok: true, ...evidence.packStatus() }))
@@ -128,6 +131,8 @@ function registerAll() {
 
   // settings
   registerHandler(IPC.SETTINGS_GET_ALL, () => ({ ok: true, settings: settings.getAll() }))
+  registerHandler(IPC.SETTINGS_EXPORT, () => require('./services/dataPortability').exportConfig())
+  registerHandler(IPC.SETTINGS_IMPORT, () => require('./services/dataPortability').importConfig())
   registerHandler(IPC.SETTINGS_SET, (a) => {
     if (String(a.key || '').startsWith('shortcuts.')) {
       const name = String(a.key).slice('shortcuts.'.length)
@@ -141,10 +146,22 @@ function registerAll() {
     return { ok: true, value }
   })
 
+  // lifecycle / diagnostics / update
+  registerHandler(IPC.LIFECYCLE_DIAGNOSTICS, () => ({ ok: true, report: require('./services/diagnostics').run() }))
+  registerHandler(IPC.LIFECYCLE_BACKUP, () => require('./services/diagnostics').backupNow())
+  registerHandler(IPC.LIFECYCLE_RESTORE, (a) => require('./services/diagnostics').restore(a.backupId))
+  registerHandler(IPC.LIFECYCLE_RESTART, () => require('./services/diagnostics').restart())
+  registerHandler(IPC.LIFECYCLE_EXPORT_REPORT, () => require('./services/diagnostics').exportReport())
+  registerHandler(IPC.LIFECYCLE_OPEN_BACKUPS, () => require('./services/diagnostics').openBackups())
+  registerHandler(IPC.UPDATE_CHECK, () => require('./services/updater').check())
+  registerHandler(IPC.UPDATE_DOWNLOAD, () => require('./services/updater').download())
+  registerHandler(IPC.UPDATE_STATUS, () => require('./services/updater').status())
+  registerHandler(IPC.UPDATE_INSTALL, () => require('./services/updater').install())
+
   // server
   registerHandler(IPC.SERVER_INFO, () => {
     const s = settings.getAll()
-    return { ok: true, port: s.server.port, token: s.server.token, urls: s.server.urls, userData: app.getPath('userData') }
+    return { ok: true, port: s.server.port, token: s.server.token, urls: s.server.urls, userData: app.getPath('userData'), version: app.getVersion(), isPackaged: app.isPackaged }
   })
   registerHandler(IPC.SERVER_OPEN_BROWSER, () => {
     const s = settings.getAll()

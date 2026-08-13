@@ -3,7 +3,7 @@ productName: 牛马联盟
 artifactName: 牛马联盟-Setup-${version}.${ext}
 directories:
   output: ../牛马联盟-发行工作区/output
-  buildResources: ../牛马联盟-发行工作区/resources
+  buildResources: build
 files:
   - dist/**
   - src/main/**
@@ -23,7 +23,7 @@ asar: true
 asarUnpack:
   - node_modules/better-sqlite3/**
 win:
-  icon: ../牛马联盟-发行工作区/resources/icon.ico
+  icon: build/icon.ico
   target:
     - target: nsis
       arch:
@@ -35,10 +35,10 @@ nsis:
   createDesktopShortcut: always
   createStartMenuShortcut: true
   shortcutName: 牛马联盟
-  installerIcon: ../牛马联盟-发行工作区/resources/icon.ico
-  uninstallerIcon: ../牛马联盟-发行工作区/resources/icon.ico
-  installerHeaderIcon: ../牛马联盟-发行工作区/resources/icon.ico
-  include: ../牛马联盟-发行工作区/resources/installer.nsh
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  include: build/installer.nsh
   runAfterFinish: true
   deleteAppDataOnUninstall: false
   displayLanguageSelector: false

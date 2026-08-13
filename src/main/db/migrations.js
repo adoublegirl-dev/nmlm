@@ -192,8 +192,21 @@ const MIGRATIONS = [
       );
       CREATE INDEX IF NOT EXISTS idx_evidence_review_item ON evidence_reviews(evidence_id);
     `
+  },
+  {
+    version: 7,
+    name: 'app-lifecycle-metadata',
+    sql: `
+      CREATE TABLE IF NOT EXISTS app_metadata (
+        key         TEXT PRIMARY KEY,
+        value       TEXT NOT NULL,
+        updated_at  INTEGER NOT NULL
+      );
+    `
   }
 ]
+
+const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version
 
 function migrate(db) {
   db.exec('CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)')
@@ -206,7 +219,7 @@ function migrate(db) {
     })
     tx()
   }
-  return applied.length
+  return LATEST_SCHEMA_VERSION
 }
 
-module.exports = { MIGRATIONS, migrate }
+module.exports = { MIGRATIONS, LATEST_SCHEMA_VERSION, migrate }

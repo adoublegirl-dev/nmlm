@@ -124,17 +124,46 @@
 - 支持单独录制 F1-F24，忽略单独 Ctrl/Alt/Shift/Meta。
 - 首次启动设置向导：证据库位置、记录器、提醒；支持跳过和设置页重开。
 
-### Windows 发行准备
+### 安装、升级、恢复与发行（P0-P3）
 
-已完成：
+状态：P0-P3 已完成首轮实现，版本提升至 0.2.0。
 
-- 源码与 `牛马联盟-发行工作区` 隔离。
-- 牛头/马头融合图标接入 exe、窗口、托盘和安装器。
-- assisted NSIS：支持选择安装路径、安装进度、桌面/开始菜单快捷方式。
-- 安装包白名单与 ASAR 扫描确认不含数据库、证据库、截图和日志。
-- win-unpacked 冒烟启动、API 正常。
+P0 生命周期安全：
 
-发行二进制不进入 Git 仓库，由独立发行工作区维护。
+- [x] 冻结 appId `com.niuma.union` 与 productName `牛马联盟`。
+- [x] 区分首次安装、升级、普通启动。
+- [x] 升级前 SQLite 在线备份；migration 失败安排恢复。
+- [x] `app_metadata` 记录应用/schema 版本与安装升级时间。
+- [x] 检测应用或 schema 降级并阻止写入。
+- [x] 自定义证据库失联时禁止创建假空库并停止写入。
+
+P1 数据找回：
+
+- [x] 重新定位已有证据库。
+- [x] 基于 relative_path 修正路径，从 meta 重建缺失索引。
+- [x] 配置导出/导入，不包含 Token、数据库和证据原件。
+- [x] 手动卸载询问是否删除本地设置/台账，外置证据库永不删除。
+
+P2 更新能力：
+
+- [x] HTTPS 检查 GitHub Release/JSON manifest。
+- [x] 语义版本比较、更新说明、下载进度。
+- [x] 强制 SHA256 校验，无可信校验值拒绝安装。
+- [x] 用户确认后启动安装器，不静默覆盖。
+
+P3 发布与恢复：
+
+- [x] “系统”页：诊断、证据连接、配置迁移、备份恢复、更新。
+- [x] 手动备份、备份列表、恢复任务与重启生效。
+- [x] 诊断报告导出与 `release:preflight`。
+- [x] 源码与 `牛马联盟-发行工作区` 隔离。
+- [x] 牛头/马头融合图标接入 exe、窗口、托盘和安装器。
+- [x] assisted NSIS：可选安装路径、进度、快捷方式。
+- [x] ASAR 扫描无数据库、证据库、截图和日志。
+- [x] 0.1.0 → 0.2.0 升级备份实机冒烟通过。
+- [x] 0.2.0 win-unpacked 诊断通过。
+
+发行规范见 `plan/RELEASE_LIFECYCLE.md`。发行二进制不进入 Git 仓库。
 
 ## 2. 发布前清理
 
@@ -155,7 +184,9 @@ npm run dev:utf8
 
 最近一次验证：
 
-- `npm test`：37 tests passed
-- `npm run build:renderer`：通过
-- `panel.html`：200
-- `recorder.html`：200
+- `npm test`：40 tests passed（含生命周期首次安装/降级保护）。
+- `npm run build:renderer`：通过。
+- `npm run release:preflight`：通过。
+- 0.1.0 → 0.2.0：自动生成升级前备份，schema 7，诊断通过。
+- `win-unpacked`：packaged=true，诊断全部通过。
+- ASAR：4162 项，forbidden=[]。

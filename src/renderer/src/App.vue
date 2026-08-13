@@ -27,6 +27,7 @@
       <ToolsView v-else-if="route === 'tools'" />
       <TodosView v-else-if="route === 'todos'" />
       <SettingsView v-else-if="route === 'settings'" @open-setup="showSetup = true" />
+      <SystemView v-else-if="route === 'system'" />
     </main>
     <SetupView v-if="showSetup" @done="showSetup = false" />
   </div>
@@ -42,6 +43,7 @@ import ReportView from './views/ReportView.vue'
 import ToolsView from './views/ToolsView.vue'
 import TodosView from './views/TodosView.vue'
 import SettingsView from './views/SettingsView.vue'
+import SystemView from './views/SystemView.vue'
 import SetupView from './views/SetupView.vue'
 import dayBackground from './assets/background-day-cattle-horses.png'
 import nightBackground from './assets/background-night-cattle-horses.png'
@@ -52,7 +54,8 @@ const navs = [
   { key: 'report', label: '报表' },
   { key: 'tools', label: '工具' },
   { key: 'todos', label: '待办' },
-  { key: 'settings', label: '设置' }
+  { key: 'settings', label: '设置' },
+  { key: 'system', label: '系统' }
 ]
 
 const savedTheme = localStorage.getItem('nmlm.panelTheme')

@@ -66,8 +66,8 @@ function createServer(port) {
     res.json(result)
   })
 
-  // 截图静态目录
-  app.use('/shots', express.static(evidence.screenshotsDir()))
+  // 证据静态目录按请求动态解析，迁移/重新定位证据库后无需重启服务。
+  app.use('/shots', (req, res, next) => express.static(evidence.screenshotsDir())(req, res, next))
 
   // 根路径重定向到主面板（多入口构建无 index.html）
   app.get('/', (req, res) => res.redirect('/panel.html'))

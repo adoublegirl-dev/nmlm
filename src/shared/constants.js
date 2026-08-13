@@ -32,6 +32,9 @@ const IPC = {
   EVIDENCE_OPEN_FOLDER: 'evidence:openFolder',
   EVIDENCE_DELETE: 'evidence:delete',
   EVIDENCE_MIGRATE_DIR: 'evidence:migrateDir',
+  EVIDENCE_RELOCATE: 'evidence:relocate',
+  EVIDENCE_REBUILD_INDEX: 'evidence:rebuildIndex',
+  EVIDENCE_STATUS: 'evidence:status',
   EVIDENCE_EXPORT_MARKDOWN: 'evidence:exportMarkdown',
   EVIDENCE_PACK: 'evidence:pack',
   EVIDENCE_PACK_STATUS: 'evidence:packStatus',
@@ -60,6 +63,19 @@ const IPC = {
   // settings
   SETTINGS_GET_ALL: 'settings:getAll',
   SETTINGS_SET: 'settings:set',
+  SETTINGS_EXPORT: 'settings:export',
+  SETTINGS_IMPORT: 'settings:import',
+  // lifecycle / diagnostics / update
+  LIFECYCLE_DIAGNOSTICS: 'lifecycle:diagnostics',
+  LIFECYCLE_BACKUP: 'lifecycle:backup',
+  LIFECYCLE_RESTORE: 'lifecycle:restore',
+  LIFECYCLE_RESTART: 'lifecycle:restart',
+  LIFECYCLE_EXPORT_REPORT: 'lifecycle:exportReport',
+  LIFECYCLE_OPEN_BACKUPS: 'lifecycle:openBackups',
+  UPDATE_CHECK: 'update:check',
+  UPDATE_DOWNLOAD: 'update:download',
+  UPDATE_STATUS: 'update:status',
+  UPDATE_INSTALL: 'update:install',
   // server
   SERVER_INFO: 'server:info',
   SERVER_OPEN_BROWSER: 'server:openBrowser',
@@ -159,6 +175,17 @@ const DEFAULT_SETTINGS = {
   onboarding: {
     completed: false,
     version: 1
+  },
+  install: {
+    lastStartMode: null,
+    currentVersion: null
+  },
+  update: {
+    enabled: true,
+    channel: 'stable',
+    manifestUrl: 'https://api.github.com/repos/adoublegirl-dev/nmlm/releases/latest',
+    autoCheck: false,
+    lastCheckedAt: null
   },
   tools: [
     { id: 'deepseek', name: 'DeepSeek', url: 'https://chat.deepseek.com', group: '效率' },
