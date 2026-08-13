@@ -255,18 +255,33 @@ function applyPausePointPlan({ entryId, points = [], baseTagId, detail } = {}) {
   const finalBaseTagId = baseTagId !== undefined ? validTagId(baseTagId) : entry.tag_id
   if (baseTagId != null && finalBaseTagId == null) return { ok: false, error: '标签不存在' }
   const finalDetail = detail !== undefined ? detail : entry.detail
+  const splitEnd = entry.end_time || Date.now()
   const existing = pausePointsRepo.listByEntry(entry.id)
   const existingIds = new Set(existing.map((p) => p.id))
+  const normalizedPoints = []
   for (const p of points) {
-    if (!existingIds.has(p.id)) return { ok: false, error: '暂停点不存在' }
+    const idNum = Number(p.id)
+    const isExisting = Number.isInteger(idNum) && existingIds.has(idNum)
+    if (p.id != null && !String(p.id).startsWith('new-') && !isExisting) return { ok: false, error: '暂停点不存在' }
     const finalTagId = validTagId(p.tagId)
     if (p.tagId != null && finalTagId == null) return { ok: false, error: '标签不存在' }
+    const pointTs = p.ts !== undefined ? Number(p.ts) : (isExisting ? existing.find((x) => x.id === idNum)?.ts : NaN)
+    if (!Number.isFinite(pointTs)) return { ok: false, error: '切点时间格式不正确' }
+    if (pointTs <= entry.start_time || pointTs >= splitEnd) return { ok: false, error: '切点必须位于记录开始和结束之间' }
+    normalizedPoints.push({ id: isExisting ? idNum : null, ts: pointTs, tagId: finalTagId, detail: p.detail || null })
+  }
+  normalizedPoints.sort((a, b) => a.ts - b.ts)
+  for (let i = 1; i < normalizedPoints.length; i += 1) {
+    if (normalizedPoints[i].ts === normalizedPoints[i - 1].ts) return { ok: false, error: '不能添加重复时间切点' }
   }
 
-  const wantsSplit = points.some((p) => Number(p.tagId) !== Number(finalBaseTagId))
+  const wantsSplit = normalizedPoints.some((p) => Number(p.tagId) !== Number(finalBaseTagId))
 
   const tx = getDb().transaction(() => {
-    for (const p of points) pausePointsRepo.update(p.id, { tagId: p.tagId, detail: p.detail || null })
+    for (const p of normalizedPoints) {
+      if (p.id) pausePointsRepo.update(p.id, { ts: p.ts, tagId: p.tagId, detail: p.detail })
+      else pausePointsRepo.insert({ entryId: entry.id, ts: p.ts, tagId: p.tagId, detail: p.detail })
+    }
     if (!wantsSplit) {
       const updated = entriesRepo.updateMeta(entry.id, { tagId: finalBaseTagId, detail: finalDetail })
       return { entries: [updated], split: false, updatedOnly: true }

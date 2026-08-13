@@ -110,6 +110,33 @@ describe('ledger 状态机', () => {
     expect(r2.error).toContain('当前时间')
   })
 
+  it('可事后新增切点并按标签拆分已完成记录', () => {
+    const base = 1786300000000
+    const entry = entriesRepo.insertFinished({
+      startTime: base,
+      endTime: base + 2 * 3600 * 1000,
+      durationSec: 2 * 3600,
+      tagId: 1,
+      detail: '长段记录',
+      isFragment: 0
+    })
+    const r = ledger.applyPausePointPlan({
+      entryId: entry.id,
+      baseTagId: 1,
+      detail: '长段记录',
+      points: [{ id: 'new-test', ts: base + 3600 * 1000, tagId: 2, detail: '改为开会' }]
+    })
+    expect(r.ok).toBe(true)
+    expect(r.split).toBe(true)
+    expect(r.entries.length).toBe(2)
+    expect(r.entries[0].start_time).toBe(base)
+    expect(r.entries[0].end_time).toBe(base + 3600 * 1000)
+    expect(r.entries[0].tag_id).toBe(1)
+    expect(r.entries[1].start_time).toBe(base + 3600 * 1000)
+    expect(r.entries[1].end_time).toBe(base + 2 * 3600 * 1000)
+    expect(r.entries[1].tag_id).toBe(2)
+  })
+
   it('pause 不归档旧段，只写暂停点并进入暂停态', async () => {
     await ledger.start({ tagId: 1 })
     const r = await ledger.pause()

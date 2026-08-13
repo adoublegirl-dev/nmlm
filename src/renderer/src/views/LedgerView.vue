@@ -146,11 +146,15 @@
             >{{ t.name }}</button>
           </div>
           <textarea v-model="editForm.detail" class="input edit-detail" placeholder="写点什么：这段在做什么、为什么被切碎…" rows="3"></textarea>
-          <div v-if="s.pausePoints?.length" class="pause-editor">
-            <h4>时间节点切分</h4>
-            <div class="muted split-hint">节点标签表示“从该节点开始到下一个节点/结束”的标签。不同标签会拆分记录，连续同标签会自动合并。</div>
+          <div v-if="s.end_time" class="pause-editor">
+            <div class="pause-editor-head">
+              <h4>时间节点切分</h4>
+              <button class="btn small" @click="addDraftPausePoint">+ 添加切点</button>
+            </div>
+            <div class="muted split-hint">切点表示“从这个时间点开始进入新标签”。不同标签会拆分记录，连续同标签会自动合并。</div>
+            <div v-if="!editForm.pausePoints.length" class="muted split-hint">还没有切点，可以添加一个时间点来事后拆分这段记录。</div>
             <div v-for="p in editForm.pausePoints" :key="p.id" class="pause-edit-row">
-              <span class="num">{{ p.timeText }}</span>
+              <input class="input pause-time-input" type="datetime-local" step="1" v-model="p.timeValue" />
               <select class="input pause-select" v-model.number="p.tagId">
                 <option v-for="t in tags" :key="t.id" :value="t.id">{{ t.name }}</option>
               </select>
@@ -675,7 +679,9 @@ function fillEditForm(s) {
     endValue: s.end_time ? toDateTimeInput(s.end_time) : '',
     pausePoints: (s.pausePoints || []).map((p) => ({
       id: p.id,
+      ts: p.ts,
       timeText: p.timeText,
+      timeValue: toDateTimeInput(p.ts),
       tagId: p.tag_id == null ? s.tag_id : p.tag_id,
       detail: p.detail || ''
     }))
@@ -704,6 +710,35 @@ function closeEdit() {
   expandedEntryId.value = null
   editEntry.value = null
 }
+function addDraftPausePoint() {
+  if (!editEntry.value?.end_time) return
+  const existing = editForm.value.pausePoints
+    .map((p) => fromDateTimeInput(p.timeValue))
+    .filter((ts) => ts != null)
+  const candidates = [editEntry.value.start_time, ...existing, editEntry.value.end_time].sort((a, b) => a - b)
+  let bestStart = editEntry.value.start_time
+  let bestEnd = editEntry.value.end_time
+  let bestGap = 0
+  for (let i = 0; i < candidates.length - 1; i += 1) {
+    const gap = candidates[i + 1] - candidates[i]
+    if (gap > bestGap) {
+      bestGap = gap
+      bestStart = candidates[i]
+      bestEnd = candidates[i + 1]
+    }
+  }
+  const ts = bestStart + Math.floor((bestEnd - bestStart) / 2)
+  editForm.value.pausePoints.push({
+    id: `new-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    ts,
+    timeText: formatTime(ts, { seconds: true }),
+    timeValue: toDateTimeInput(ts),
+    tagId: editForm.value.tagId || tags.value[0]?.id || null,
+    detail: ''
+  })
+  editForm.value.pausePoints.sort((a, b) => fromDateTimeInput(a.timeValue) - fromDateTimeInput(b.timeValue))
+}
+
 async function saveEdit() {
   if (!editEntry.value) return
   try {
@@ -734,7 +769,12 @@ async function saveEdit() {
       entryId: editEntry.value.id,
       baseTagId: editForm.value.tagId,
       detail,
-      points: editForm.value.pausePoints.map((p) => ({ id: p.id, tagId: p.tagId, detail: p.detail?.trim() || null }))
+      points: editForm.value.pausePoints.map((p) => ({
+        id: p.id,
+        ts: fromDateTimeInput(p.timeValue),
+        tagId: p.tagId,
+        detail: p.detail?.trim() || null
+      }))
     })
     if (!r.ok) return alert(r.error || '保存失败')
     if (r.split) alert('已按时间节点拆分并刷新台账')
@@ -960,10 +1000,13 @@ onBeforeUnmount(() => {
 .edit-tag.active { outline: 2px solid var(--c); }
 .edit-detail { resize: vertical; font-family: inherit; }
 .pause-editor { border-top: 1px solid var(--border); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.pause-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .pause-editor h4 { font-size: 13px; font-weight: 500; color: var(--gold); }
+.btn.small { padding: 4px 9px; font-size: 12px; }
 .split-hint { font-size: 12px; line-height: 1.5; }
 .pause-edit-row { display: flex; align-items: center; gap: 8px; }
 .pause-edit-row .num { width: 62px; color: var(--text-dim); }
+.pause-time-input { width: 210px; font-family: var(--font-mono); }
 .pause-select { width: 130px; }
 .pause-detail { flex: 1; min-width: 160px; }
 .edit-ops { display: flex; justify-content: flex-end; gap: 8px; }
