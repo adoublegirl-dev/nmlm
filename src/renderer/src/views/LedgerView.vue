@@ -259,6 +259,7 @@
 import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { api, on } from '../api'
 import { formatDuration, formatTime, formatDate, dayLabel } from '../utils/format'
+import { showAlert, showConfirm } from '../utils/dialog'
 
 const DAY_MS = 86400000
 const WORK_START_HOUR = 8
@@ -562,7 +563,7 @@ async function stopClipResize() {
     await api('ledger:adjustTime', { id: clip.id, startTime, endTime })
     await load()
   } catch (err) {
-    alert(err.message || '时间调整失败')
+    await showAlert(err.message || '时间调整失败', '时间调整失败')
   }
 }
 function openClipFromTimeline(clip) {
@@ -753,7 +754,7 @@ function focusActivitySuggestion(signature) {
 }
 async function convertActivityToLedger(a) {
   const form = activityForms.value[a.signature] || {}
-  const ok = confirm(`将 ${formatActivityRange(a)} 补记为台账？\n\n该操作只补当前空白区间，不会覆盖已有台账。`)
+  const ok = await showConfirm(`将 ${formatActivityRange(a)} 补记为台账？\n\n该操作只补当前空白区间，不会覆盖已有台账。`, { title: '补记活动轨迹', confirmText: '补记' })
   if (!ok) return
   const r = await api('activity:convertToLedger', {
     start: a.start,
@@ -761,11 +762,11 @@ async function convertActivityToLedger(a) {
     tagId: form.tagId,
     detail: form.detail?.trim() || null
   })
-  if (!r.ok) return alert(r.error || '补记失败')
+  if (!r.ok) return showAlert(r.error || '补记失败', '补记失败')
   await load({ focusWorkStart: false })
 }
 async function applyActivityIdleBreak(a) {
-  const ok = confirm(`按活动轨迹把 ${formatActivityRange(a)} 标为疑似离开？\n\n系统会在正式台账中添加两个切点，原始轨迹不会被修改。`)
+  const ok = await showConfirm(`按活动轨迹把 ${formatActivityRange(a)} 标为疑似离开？\n\n系统会在正式台账中添加两个切点，原始轨迹不会被修改。`, { title: '按轨迹切分', confirmText: '切分' })
   if (!ok) return
   const r = await api('activity:applyIdleBreak', {
     entryId: a.entryId,
@@ -773,12 +774,12 @@ async function applyActivityIdleBreak(a) {
     end: a.end,
     detail: '活动轨迹显示这段可能离开电脑'
   })
-  if (!r.ok) return alert(r.error || '切分失败')
+  if (!r.ok) return showAlert(r.error || '切分失败', '切分失败')
   await load({ focusWorkStart: false })
 }
 async function ignoreActivity(a) {
   const r = await api('activity:ignore', a)
-  if (!r.ok) return alert(r.error || '忽略失败')
+  if (!r.ok) return showAlert(r.error || '忽略失败', '忽略失败')
   activitySuggestions.value = activitySuggestions.value.filter((x) => x.signature !== a.signature)
 }
 
@@ -894,58 +895,58 @@ function addDraftPausePoint() {
 async function saveEdit() {
   if (!editEntry.value) return
   try {
-  const detail = editForm.value.detail.trim() || null
-  if (editEntry.value.end_time) {
-    const startTime = fromDateTimeInput(editForm.value.startValue)
-    const endTime = fromDateTimeInput(editForm.value.endValue)
-    if (startTime == null || endTime == null) return alert('请填写有效的开始和结束时间')
-    if (!sameSecond(startTime, editEntry.value.start_time) || !sameSecond(endTime, editEntry.value.end_time)) {
-      await api('ledger:adjustTime', { id: editEntry.value.id, startTime, endTime })
+    const detail = editForm.value.detail.trim() || null
+    if (editEntry.value.end_time) {
+      const startTime = fromDateTimeInput(editForm.value.startValue)
+      const endTime = fromDateTimeInput(editForm.value.endValue)
+      if (startTime == null || endTime == null) return showAlert('请填写有效的开始和结束时间')
+      if (!sameSecond(startTime, editEntry.value.start_time) || !sameSecond(endTime, editEntry.value.end_time)) {
+        await api('ledger:adjustTime', { id: editEntry.value.id, startTime, endTime })
+      }
     }
-  }
-  if (!editForm.value.pausePoints.length) {
-    const r = await api('ledger:retag', {
-      id: editEntry.value.id,
-      tagId: editForm.value.tagId,
-      detail
-    })
-    if (!r.ok) return alert(r.error || '保存失败')
-  } else {
-    const baseTag = editForm.value.tagId
-    const willSplit = editForm.value.pausePoints.some((p) => Number(p.tagId) !== Number(baseTag))
-    let cleanupSameTagPoints = false
-    if (willSplit) {
-      const ok = confirm('时间节点中存在与当前记录不同的标签。确认后，当前记录将按节点拆分成多条，并自动合并连续相同标签。')
-      if (!ok) return
+    if (!editForm.value.pausePoints.length) {
+      const r = await api('ledger:retag', {
+        id: editEntry.value.id,
+        tagId: editForm.value.tagId,
+        detail
+      })
+      if (!r.ok) return showAlert(r.error || '保存失败', '保存失败')
     } else {
-      const hasNodeDetail = editForm.value.pausePoints.some((p) => p.detail?.trim())
-      const msg = hasNodeDetail
-        ? '暂停点标签和起始标签一致，不需要切分。确认后会合并整个片段并移除暂停点；暂停点文字会追加到片段备注中，避免丢失。是否执行？'
-        : '暂停点标签和起始标签一致，不需要切分。确认后会合并整个片段并移除这些暂停点。是否执行？'
-      cleanupSameTagPoints = confirm(msg)
-      if (!cleanupSameTagPoints) return
+      const baseTag = editForm.value.tagId
+      const willSplit = editForm.value.pausePoints.some((p) => Number(p.tagId) !== Number(baseTag))
+      let cleanupSameTagPoints = false
+      if (willSplit) {
+        const ok = await showConfirm('时间节点中存在与当前记录不同的标签。确认后，当前记录将按节点拆分成多条，并自动合并连续相同标签。', { title: '按节点拆分', confirmText: '拆分' })
+        if (!ok) return
+      } else {
+        const hasNodeDetail = editForm.value.pausePoints.some((p) => p.detail?.trim())
+        const msg = hasNodeDetail
+          ? '暂停点标签和起始标签一致，不需要切分。确认后会合并整个片段并移除暂停点；暂停点文字会追加到片段备注中，避免丢失。是否执行？'
+          : '暂停点标签和起始标签一致，不需要切分。确认后会合并整个片段并移除这些暂停点。是否执行？'
+        cleanupSameTagPoints = await showConfirm(msg, { title: '合并同标签片段', confirmText: '合并' })
+        if (!cleanupSameTagPoints) return
+      }
+      const r = await api('ledger:applyPausePointPlan', {
+        entryId: editEntry.value.id,
+        baseTagId: editForm.value.tagId,
+        detail,
+        cleanupSameTagPoints,
+        points: editForm.value.pausePoints.map((p) => ({
+          id: p.id,
+          ts: fromDateTimeInput(p.timeValue),
+          tagId: p.tagId,
+          detail: p.detail?.trim() || null
+        }))
+      })
+      if (!r.ok) return showAlert(r.error || '保存失败', '保存失败')
+      if (r.split) await showAlert('已按时间节点拆分并刷新台账')
+      else if (r.cleaned) await showAlert('已合并片段并清理同标签暂停点')
     }
-    const r = await api('ledger:applyPausePointPlan', {
-      entryId: editEntry.value.id,
-      baseTagId: editForm.value.tagId,
-      detail,
-      cleanupSameTagPoints,
-      points: editForm.value.pausePoints.map((p) => ({
-        id: p.id,
-        ts: fromDateTimeInput(p.timeValue),
-        tagId: p.tagId,
-        detail: p.detail?.trim() || null
-      }))
-    })
-    if (!r.ok) return alert(r.error || '保存失败')
-    if (r.split) alert('已按时间节点拆分并刷新台账')
-    else if (r.cleaned) alert('已合并片段并清理同标签暂停点')
-  }
-  expandedEntryId.value = null
-  editEntry.value = null
-  await load()
+    expandedEntryId.value = null
+    editEntry.value = null
+    await load()
   } catch (err) {
-    alert(err.message || '保存失败')
+    await showAlert(err.message || '保存失败', '保存失败')
   }
 }
 
@@ -966,7 +967,7 @@ async function saveManualCreate() {
   try {
     const startTime = fromDateTimeInput(manualForm.value.startValue)
     const endTime = fromDateTimeInput(manualForm.value.endValue)
-    if (startTime == null || endTime == null) return alert('请填写有效的开始和结束时间')
+    if (startTime == null || endTime == null) return showAlert('请填写有效的开始和结束时间')
     await api('ledger:manualCreate', {
       startTime,
       endTime,
@@ -976,7 +977,7 @@ async function saveManualCreate() {
     manualOpen.value = false
     await load({ focusWorkStart: true })
   } catch (err) {
-    alert(err.message || '保存补记失败')
+    await showAlert(err.message || '保存补记失败', '保存补记失败')
   }
 }
 

@@ -52,6 +52,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { api } from '../api'
+import { showAlert } from '../utils/dialog'
 
 const emit = defineEmits(['done'])
 const evidenceDir = ref('')
@@ -73,10 +74,10 @@ async function chooseEvidenceDir() {
     const r = await api('evidence:migrateDir')
     if (!r.canceled) {
       evidenceDir.value = r.evidenceDir || evidenceDir.value
-      if (!r.skipped) alert(`证据库位置已设置。旧目录已保留，共校验 ${r.count || 0} 个文件。`)
+      if (!r.skipped) await showAlert(`证据库位置已设置。旧目录已保留，共校验 ${r.count || 0} 个文件。`)
     }
   } catch (e) {
-    alert(`设置证据库失败：${e.message}`)
+    await showAlert(`设置证据库失败：${e.message}`, '设置证据库失败')
   } finally {
     moving.value = false
   }
@@ -91,7 +92,7 @@ async function finish(skipped) {
     await api('settings:set', { key: 'onboarding.completed', value: true })
     emit('done')
   } catch (e) {
-    alert(`保存失败：${e.message}`)
+    await showAlert(`保存失败：${e.message}`, '保存失败')
   }
 }
 

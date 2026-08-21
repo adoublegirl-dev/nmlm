@@ -1,198 +1,155 @@
 <template>
-  <div class="settings">
-    <div class="settings-head">
-      <h2>设置</h2>
-      <button class="btn" @click="$emit('open-setup')">重新打开首次设置向导</button>
+  <div class="settings-page">
+    <div class="settings-hero">
+      <div>
+        <p class="eyebrow">Control Center</p>
+        <h2>设置中心</h2>
+        <p class="muted">把记录、证据、隐私、Agent 接入分开管理，避免功能堆在一起。</p>
+      </div>
+      <button class="btn primary" @click="$emit('open-setup')">重新打开首次设置向导</button>
     </div>
 
-    <div class="card section">
-      <h3>面板地址</h3>
-      <div class="row">
-        <span class="muted">本机访问</span>
-        <code>{{ urls.local || '…' }}</code>
-      </div>
-      <div class="row">
-        <span class="muted">局域网（手机）</span>
-        <code>{{ (urls.lan || []).join(' ') }}</code>
-      </div>
-      <div class="row">
-        <span class="muted">访问令牌</span>
-        <code>{{ maskedToken }}</code>
-        <button class="btn mini" @click="resetToken">重置</button>
-      </div>
-      <button class="btn" @click="openBrowser">在浏览器打开面板</button>
-    </div>
+    <div class="settings-layout">
+      <aside class="settings-nav card">
+        <a v-for="item in navs" :key="item.id" :href="'#' + item.id" class="settings-nav-item">
+          <span>{{ item.icon }}</span><b>{{ item.label }}</b>
+        </a>
+      </aside>
 
-    <div class="card section">
-      <h3>桌面悬浮记录器</h3>
-      <div class="row">
-        <span>启动时显示</span>
-        <input type="checkbox" :checked="recorder.enabled" @change="setRecorder('enabled', $event.target.checked)" />
-        <span class="muted">关闭后不会自动挂在桌面，需要从托盘/启动器手动打开</span>
-      </div>
-    </div>
+      <main class="settings-main">
+        <section id="basic" class="settings-section card">
+          <div class="section-head">
+            <div><p class="eyebrow">Basic</p><h3>基础与本地服务</h3></div>
+            <button class="btn" @click="openBrowser">浏览器打开后台</button>
+          </div>
+          <div class="setting-grid">
+            <div class="setting-item"><span>本机访问</span><code>{{ urls.local || '…' }}</code></div>
+            <div class="setting-item"><span>局域网访问</span><code>{{ (urls.lan || []).join(' ') || '…' }}</code></div>
+            <div class="setting-item"><span>访问令牌</span><code>{{ maskedToken }}</code><button class="btn mini" @click="resetToken">重置</button></div>
+            <div class="setting-item"><span>版本</span><code>{{ appVersion || '…' }}</code></div>
+            <div class="setting-item wide"><span>数据目录</span><code>{{ userData || '…' }}</code></div>
+          </div>
+        </section>
 
-    <div class="card section">
-      <h3>Agent MCP 接入</h3>
-      <div class="row">
-        <span class="muted">用途</span>
-        <span>复制下面配置给 Agent，可通过 Agent 创建、查询、更新牛马联盟待办。</span>
-      </div>
-      <div class="row">
-        <span class="muted">API</span>
-        <code>{{ mcp.api || '…' }}</code>
-      </div>
-      <div class="row">
-        <span class="muted">启动脚本</span>
-        <code>{{ mcp.scriptPath || '…' }}</code>
-      </div>
-      <textarea class="input mcp-config" readonly :value="mcp.configJson || ''" rows="12"></textarea>
-      <div class="mcp-actions">
-        <button class="btn primary" @click="copyMcpConfig">复制 MCP 配置</button>
-        <button class="btn" @click="loadMcpConfig">刷新配置</button>
-      </div>
-      <div class="muted hint">配置由当前安装位置动态生成，兼容中文路径；桌面端需要保持运行。</div>
-    </div>
+        <section id="record" class="settings-section card">
+          <div class="section-head">
+            <div><p class="eyebrow">Recorder</p><h3>记录器、快捷键与标签</h3></div>
+          </div>
+          <div class="setting-row soft-row">
+            <div><b>启动时显示悬浮记录器</b><p class="muted">关闭后不会自动挂在桌面，需要从托盘手动打开。</p></div>
+            <label class="switch"><input type="checkbox" :checked="recorder.enabled" @change="setRecorder('enabled', $event.target.checked)" /><i></i></label>
+          </div>
+          <div class="sub-card">
+            <div class="sub-title">快捷键</div>
+            <div v-for="(acc, name) in shortcuts" :key="name" class="compact-row">
+              <span>{{ labelOf(name) }}</span><code>{{ acc || '未启用' }}</code>
+              <button class="btn mini" @click="recordKey(name)">录制</button>
+              <button class="btn mini" @click="clearShortcut(name)">清空</button>
+            </div>
+            <div v-if="recordingKey" class="record-hint muted">按下新的组合键…（Esc 取消）</div>
+          </div>
+          <div class="sub-card">
+            <div class="sub-title">标签</div>
+            <div v-for="t in tags" :key="t.id" class="tag-row">
+              <span class="color-dot" :style="{ background: t.color }"></span>
+              <span class="tag-name">{{ t.name }}</span>
+              <input type="color" :value="t.color" @change="setTagColor(t, $event.target.value)" />
+              <input class="input mini-input" type="number" min="0" max="9" :value="t.shortcut_key ?? ''" @change="setTagKey(t, $event)" />
+              <label class="break-label"><input type="checkbox" :checked="!!t.is_break" @change="setTagBreak(t, $event.target.checked)" /> 暂停/离开</label>
+              <button class="btn mini danger" @click="deleteTag(t)">删除</button>
+            </div>
+            <div class="add-tag">
+              <input v-model="newTag.name" class="input" placeholder="新标签名" @keyup.enter="addTag" />
+              <input type="color" v-model="newTag.color" />
+              <input class="input mini-input" type="number" min="0" max="9" v-model.number="newTag.key" placeholder="数字键" />
+              <label class="break-label"><input type="checkbox" v-model="newTag.isBreak" /> 暂停/离开</label>
+              <button class="btn primary" @click="addTag">添加</button>
+            </div>
+          </div>
+        </section>
 
-    <div class="card section">
-      <h3>快捷键</h3>
-      <div v-for="(acc, name) in shortcuts" :key="name" class="row">
-        <span>{{ labelOf(name) }}</span>
-        <code>{{ acc || '未启用' }}</code>
-        <button class="btn mini" @click="recordKey(name)">录制</button>
-        <button class="btn mini" @click="clearShortcut(name)">清空</button>
-      </div>
-      <div v-if="recordingKey" class="record-hint muted">按下新的组合键…（Esc 取消）</div>
-    </div>
+        <section id="activity" class="settings-section card">
+          <div class="section-head">
+            <div><p class="eyebrow">Privacy & Activity</p><h3>活动轨迹与隐私</h3></div>
+          </div>
+          <div class="setting-row soft-row">
+            <div><b>启用被动活动记录</b><p class="muted">只记录前台应用、窗口标题和空闲秒数，不记录键盘输入内容。</p></div>
+            <label class="switch"><input type="checkbox" :checked="activity.enabled !== false" @change="setActivity('enabled', $event.target.checked)" /><i></i></label>
+          </div>
+          <div class="setting-row soft-row">
+            <div><b>敏感窗口标题脱敏</b><p class="muted">默认关闭。开启后，命中进程或标题关键词的轨迹会显示为“敏感窗口 · 已脱敏”。</p></div>
+            <label class="switch"><input type="checkbox" :checked="privacy.blurSensitiveWindows" @change="setPrivacy('blurSensitiveWindows', $event.target.checked)" /><i></i></label>
+          </div>
+          <div class="form-grid">
+            <label>采样间隔（秒）<input class="input" type="number" min="10" :value="activity.pollIntervalSec || 30" @change="setActivity('pollIntervalSec', Number($event.target.value))" /></label>
+            <label>空闲阈值（秒）<input class="input" type="number" min="30" :value="activity.idleThresholdSec || 300" @change="setActivity('idleThresholdSec', Number($event.target.value))" /></label>
+            <label>最短线索（秒）<input class="input" type="number" min="15" :value="activity.minSuggestionSec || 60" @change="setActivity('minSuggestionSec', Number($event.target.value))" /></label>
+          </div>
+          <div class="sub-card privacy-card">
+            <div class="sub-title">脱敏与噪声规则</div>
+            <label>敏感进程（逗号或换行分隔）<textarea class="input list-input" :value="listText('sensitiveProcesses')" @change="setPrivacyList('sensitiveProcesses', $event.target.value)" rows="3"></textarea></label>
+            <label>敏感标题关键词<textarea class="input list-input" :value="listText('sensitiveTitlePatterns')" @change="setPrivacyList('sensitiveTitlePatterns', $event.target.value)" rows="3" placeholder="身份证、密码、薪资…"></textarea></label>
+            <label>忽略为空闲/噪声的进程<textarea class="input list-input" :value="listText('activityIgnoredProcesses')" @change="setPrivacyList('activityIgnoredProcesses', $event.target.value)" rows="3"></textarea></label>
+            <label>忽略为空闲/噪声的窗口标题<textarea class="input list-input" :value="listText('activityIgnoredTitles')" @change="setPrivacyList('activityIgnoredTitles', $event.target.value)" rows="3"></textarea></label>
+          </div>
+        </section>
 
-    <div class="card section">
-      <h3>标签</h3>
-      <div v-for="t in tags" :key="t.id" class="row tag-row">
-        <span class="color-dot" :style="{ background: t.color }"></span>
-        <span class="tag-name">{{ t.name }}</span>
-        <input type="color" :value="t.color" @change="setTagColor(t, $event.target.value)" title="颜色" />
-        <input class="input time" type="number" min="0" max="9" :value="t.shortcut_key ?? ''" @change="setTagKey(t, $event)" title="数字键" />
-        <label class="break-label"><input type="checkbox" :checked="!!t.is_break" @change="setTagBreak(t, $event.target.checked)" /> 摸鱼</label>
-        <button class="btn mini danger" @click="deleteTag(t)">删除</button>
-      </div>
-      <div class="add-tag">
-        <input v-model="newTag.name" class="input" placeholder="新标签名" @keyup.enter="addTag" />
-        <input type="color" v-model="newTag.color" />
-        <input class="input time" type="number" min="0" max="9" v-model.number="newTag.key" placeholder="数字键" />
-        <label class="break-label"><input type="checkbox" v-model="newTag.isBreak" /> 摸鱼</label>
-        <button class="btn primary" @click="addTag">添加</button>
-      </div>
-      <div class="muted hint">结束记录时按数字键即可快速打标签，0 表示"其他"</div>
-    </div>
+        <section id="evidence" class="settings-section card">
+          <div class="section-head">
+            <div><p class="eyebrow">Evidence</p><h3>证据库</h3></div>
+            <button class="btn" @click="openScreenshotsDir">打开证据库目录</button>
+          </div>
+          <div class="notice-box">原始证据永久保留在 raw 目录，系统不会加水印、压缩替换或自动物理删除。</div>
+          <div class="setting-grid">
+            <div class="setting-item"><span>缩略图缓存保留天数</span><input class="input mini-input" type="number" :value="evidence.keepDays" @change="setEvidence('keepDays', Number($event.target.value))" /></div>
+            <div class="setting-item"><span>导出副本加水印</span><label class="switch"><input type="checkbox" :checked="evidence.watermark" @change="setEvidence('watermark', $event.target.checked)" /><i></i></label></div>
+            <div class="setting-item wide"><span>自定义根目录</span><code>{{ evidence.dir || '默认用户数据目录' }}</code></div>
+          </div>
+          <button class="btn primary" @click="migrateEvidenceDir">迁移证据库位置</button>
+        </section>
 
-    <div class="card section">
-      <h3>提醒</h3>
-      <div class="row">
-        <span>启用提醒</span>
-        <input type="checkbox" :checked="reminder.enabled" @change="setReminder('enabled', $event.target.checked)" />
-      </div>
-      <div class="row">
-        <span>检测时段</span>
-        <input class="input time" :value="reminder.checkStart" @change="setReminder('checkStart', $event.target.value)" />
-        <span class="muted">至</span>
-        <input class="input time" :value="reminder.checkEnd" @change="setReminder('checkEnd', $event.target.value)" />
-      </div>
-      <div class="row">
-        <span>暗号文案</span>
-        <input class="input" :value="reminder.message" @change="setReminder('message', $event.target.value)" />
-      </div>
-      <div class="row">
-        <span>升级文案（超工时）</span>
-        <input class="input" :value="reminder.messageUpgraded" @change="setReminder('messageUpgraded', $event.target.value)" />
-      </div>
-      <div class="row">
-        <span>工时阈值（小时）</span>
-        <input class="input time" type="number" :value="reminder.workHoursThreshold" @change="setReminder('workHoursThreshold', Number($event.target.value))" />
-      </div>
-    </div>
+        <section id="agent" class="settings-section card">
+          <div class="section-head">
+            <div><p class="eyebrow">Agent</p><h3>MCP 接入</h3></div>
+            <button class="btn" @click="loadMcpConfig">刷新配置</button>
+          </div>
+          <div class="setting-grid">
+            <div class="setting-item wide"><span>API</span><code>{{ mcp.api || '…' }}</code></div>
+            <div class="setting-item wide"><span>启动脚本</span><code>{{ mcp.scriptPath || '…' }}</code></div>
+          </div>
+          <textarea class="input mcp-config" readonly :value="mcp.configJson || ''" rows="10"></textarea>
+          <button class="btn primary" @click="copyMcpConfig">复制 MCP 配置</button>
+          <div class="muted hint">当前支持待办、台账查询、证据查询；证据导入暂不开放，避免污染证据库。</div>
+        </section>
 
-    <div class="card section">
-      <h3>活动轨迹</h3>
-      <div class="row">
-        <span>启用被动活动记录</span>
-        <input type="checkbox" :checked="activity.enabled !== false" @change="setActivity('enabled', $event.target.checked)" />
-        <span class="muted">只记录前台应用、窗口标题和空闲秒数，不记录键盘输入内容。</span>
-      </div>
-      <div class="row">
-        <span>采样间隔（秒）</span>
-        <input class="input time" type="number" min="10" :value="activity.pollIntervalSec || 30" @change="setActivity('pollIntervalSec', Number($event.target.value))" />
-      </div>
-      <div class="row">
-        <span>空闲阈值（秒）</span>
-        <input class="input time" type="number" min="30" :value="activity.idleThresholdSec || 300" @change="setActivity('idleThresholdSec', Number($event.target.value))" />
-        <span class="muted">超过该时间没有键鼠输入时，轨迹会标记为疑似离开。</span>
-      </div>
-      <div class="row">
-        <span>最短线索（秒）</span>
-        <input class="input time" type="number" min="15" :value="activity.minSuggestionSec || 60" @change="setActivity('minSuggestionSec', Number($event.target.value))" />
-      </div>
-    </div>
-
-    <div class="card section">
-      <h3>证据</h3>
-      <div class="row">
-        <span class="muted">原始证据</span>
-        <span>永久保留在 raw 目录，系统不会加水印、压缩替换或自动物理删除。</span>
-      </div>
-      <div class="row">
-        <span>缩略图缓存保留天数</span>
-        <input class="input time" type="number" :value="evidence.keepDays" @change="setEvidence('keepDays', Number($event.target.value))" />
-        <span class="muted">仅用于未来缩略图/缓存清理，不影响原始证据。</span>
-      </div>
-      <div class="row">
-        <span>导出副本加水印</span>
-        <input type="checkbox" :checked="evidence.watermark" @change="setEvidence('watermark', $event.target.checked)" />
-        <span class="muted">只作用于未来导出的副本，绝不修改 raw 原件。</span>
-      </div>
-      <div class="row">
-        <span class="muted">自定义根目录</span>
-        <code>{{ evidence.dir || '默认用户数据目录' }}</code>
-      </div>
-      <div class="mcp-actions">
-        <button class="btn" @click="openScreenshotsDir">打开证据库目录</button>
-        <button class="btn primary" @click="migrateEvidenceDir">迁移证据库位置</button>
-      </div>
-    </div>
-
-    <div class="card section">
-      <h3>模型（P2 开放）</h3>
-      <div class="row">
-        <span>provider</span>
-        <select class="input time" :value="model.provider" @change="setModel('provider', $event.target.value)">
-          <option value="ollama">ollama</option>
-          <option value="openai">openai</option>
-        </select>
-      </div>
-      <div class="row">
-        <span>baseURL</span>
-        <input class="input" :value="model.baseURL" @change="setModel('baseURL', $event.target.value)" />
-      </div>
-      <div class="row">
-        <span>model</span>
-        <input class="input" :value="model.model" @change="setModel('model', $event.target.value)" />
-      </div>
-      <span class="muted">报告生成将在 P2 实现</span>
-    </div>
-
-    <div class="card section">
-      <h3>关于</h3>
-      <div class="row"><span class="muted">版本</span><code>{{ appVersion || '…' }}</code></div>
-      <div class="row"><span class="muted">协议</span><span>MIT · 开源 · 数据全本地</span></div>
-      <div class="row"><span class="muted">数据目录</span><code>{{ userData }}</code></div>
+        <section id="model" class="settings-section card">
+          <div class="section-head"><div><p class="eyebrow">Model</p><h3>模型（预留）</h3></div></div>
+          <div class="form-grid">
+            <label>provider<select class="input" :value="model.provider" @change="setModel('provider', $event.target.value)"><option value="ollama">ollama</option><option value="openai">openai</option></select></label>
+            <label>baseURL<input class="input" :value="model.baseURL" @change="setModel('baseURL', $event.target.value)" /></label>
+            <label>model<input class="input" :value="model.model" @change="setModel('model', $event.target.value)" /></label>
+          </div>
+        </section>
+      </main>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { api } from '../api'
+import { showAlert, showConfirm } from '../utils/dialog'
 
 defineEmits(['open-setup'])
-import { api } from '../api'
+
+const navs = [
+  { id: 'basic', label: '基础', icon: '◎' },
+  { id: 'record', label: '记录', icon: '◷' },
+  { id: 'activity', label: '轨迹隐私', icon: '⌁' },
+  { id: 'evidence', label: '证据', icon: '◈' },
+  { id: 'agent', label: 'Agent', icon: '✦' },
+  { id: 'model', label: '模型', icon: '◇' }
+]
 
 const urls = ref({})
 const token = ref('')
@@ -202,6 +159,7 @@ const shortcuts = ref({})
 const reminder = ref({})
 const evidence = ref({})
 const activity = ref({})
+const privacy = ref({})
 const model = ref({})
 const recorder = ref({})
 const mcp = ref({})
@@ -210,15 +168,11 @@ const newTag = ref({ name: '', color: '#e0bc72', key: null, isBreak: false })
 const recordingKey = ref(null)
 const recordingName = ref('')
 
-const maskedToken = computed(() => {
-  if (!token.value) return '…'
-  return token.value.slice(0, 6) + '••••'
-})
-
+const maskedToken = computed(() => token.value ? token.value.slice(0, 6) + '••••' : '…')
 const LABELS = { start: '开始/暂停记录', stop: '停止记录', screenshot: '快捷截图', pack: '打包证据链', openPanel: '打开面板' }
-function labelOf(name) {
-  return LABELS[name] || name
-}
+function labelOf(name) { return LABELS[name] || name }
+function parseList(value) { return String(value || '').split(/[\n,，]/).map((x) => x.trim()).filter(Boolean) }
+function listText(key) { return (privacy.value[key] || []).join('\n') }
 
 async function load() {
   const r = await api('settings:getAll')
@@ -229,6 +183,7 @@ async function load() {
   reminder.value = s.reminder || {}
   evidence.value = s.evidence || {}
   activity.value = s.activity || {}
+  privacy.value = s.privacy || {}
   model.value = s.model || {}
   recorder.value = s.recorder || s.mini || {}
   const info = await api('server:info')
@@ -240,121 +195,62 @@ async function load() {
   tags.value = tagRes.tags || []
   await loadMcpConfig()
 }
-
-async function setReminder(key, val) {
-  await api('settings:set', { key: `reminder.${key}`, value: val })
-}
-async function setEvidence(key, val) {
-  await api('settings:set', { key: `evidence.${key}`, value: val })
-  evidence.value[key] = val
-}
-async function setActivity(key, val) {
-  await api('settings:set', { key: `activity.${key}`, value: val })
-  activity.value[key] = val
-}
-async function setModel(key, val) {
-  await api('settings:set', { key: `model.${key}`, value: val })
-}
-async function setRecorder(key, val) {
-  await api('settings:set', { key: `recorder.${key}`, value: val })
-  recorder.value[key] = val
-}
+async function setReminder(key, val) { await api('settings:set', { key: `reminder.${key}`, value: val }); reminder.value[key] = val }
+async function setEvidence(key, val) { await api('settings:set', { key: `evidence.${key}`, value: val }); evidence.value[key] = val }
+async function setActivity(key, val) { await api('settings:set', { key: `activity.${key}`, value: val }); activity.value[key] = val }
+async function setPrivacy(key, val) { await api('settings:set', { key: `privacy.${key}`, value: val }); privacy.value[key] = val }
+async function setPrivacyList(key, val) { await setPrivacy(key, parseList(val)) }
+async function setModel(key, val) { await api('settings:set', { key: `model.${key}`, value: val }); model.value[key] = val }
+async function setRecorder(key, val) { await api('settings:set', { key: `recorder.${key}`, value: val }); recorder.value[key] = val }
 
 async function resetToken() {
+  const ok = await showConfirm('重置后旧的局域网/Agent 访问令牌会失效，是否继续？', { title: '重置访问令牌', confirmText: '重置' })
+  if (!ok) return
   const t = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
   await api('settings:set', { key: 'server.token', value: t })
   token.value = t
-  alert('令牌已重置')
+  await showAlert('令牌已重置')
 }
-
-async function setTagColor(t, color) {
-  await api('tags:update', { id: t.id, color })
-  t.color = color
-}
-async function setTagKey(t, e) {
-  const v = e.target.value === '' ? null : Number(e.target.value)
-  await api('tags:update', { id: t.id, shortcutKey: v })
-  t.shortcut_key = v
-}
-async function setTagBreak(t, isBreak) {
-  await api('tags:update', { id: t.id, isBreak: isBreak ? 1 : 0 })
-  t.is_break = isBreak ? 1 : 0
-}
+async function setTagColor(t, color) { await api('tags:update', { id: t.id, color }); t.color = color }
+async function setTagKey(t, e) { const v = e.target.value === '' ? null : Number(e.target.value); await api('tags:update', { id: t.id, shortcutKey: v }); t.shortcut_key = v }
+async function setTagBreak(t, isBreak) { await api('tags:update', { id: t.id, isBreak: isBreak ? 1 : 0 }); t.is_break = isBreak ? 1 : 0 }
 async function deleteTag(t) {
-  if (!confirm(`删除标签「${t.name}」？相关记录将变为未分类`)) return
+  const ok = await showConfirm(`删除标签「${t.name}」？相关记录将变为未分类。`, { title: '删除标签', confirmText: '删除', danger: true })
+  if (!ok) return
   await api('tags:delete', { id: t.id })
   tags.value = tags.value.filter((x) => x.id !== t.id)
 }
 async function addTag() {
   const name = newTag.value.name.trim()
   if (!name) return
-  await api('tags:create', {
-    name,
-    color: newTag.value.color,
-    shortcutKey: newTag.value.key,
-    isBreak: newTag.value.isBreak ? 1 : 0
-  })
+  await api('tags:create', { name, color: newTag.value.color, shortcutKey: newTag.value.key, isBreak: newTag.value.isBreak ? 1 : 0 })
   newTag.value = { name: '', color: '#e0bc72', key: null, isBreak: false }
   const tagRes = await api('tags:list')
   tags.value = tagRes.tags || []
 }
-
-function openBrowser() {
-  api('server:openBrowser')
-}
-
-function openScreenshotsDir() {
-  api('app:openScreenshotsDir')
-}
+function openBrowser() { api('server:openBrowser') }
+function openScreenshotsDir() { api('app:openScreenshotsDir') }
 async function migrateEvidenceDir() {
   try {
     const r = await api('evidence:migrateDir')
     if (r.canceled) return
-    if (r.skipped) {
-      alert('新旧证据库位置相同，无需迁移')
-      return
-    }
+    if (r.skipped) return showAlert('新旧证据库位置相同，无需迁移')
     await load()
-    alert(`证据库迁移完成：${r.count || 0} 个文件。旧目录已保留。`)
-  } catch (e) {
-    alert(`迁移失败：${e.message}`)
-  }
+    await showAlert(`证据库迁移完成：${r.count || 0} 个文件。旧目录已保留。`)
+  } catch (e) { await showAlert(`迁移失败：${e.message}`, '迁移失败') }
 }
-
-async function loadMcpConfig() {
-  const r = await api('server:mcpConfig')
-  if (r.ok) mcp.value = r
-}
-
+async function loadMcpConfig() { const r = await api('server:mcpConfig'); if (r.ok) mcp.value = r }
 async function copyMcpConfig() {
   if (!mcp.value.configJson) await loadMcpConfig()
-  try {
-    await navigator.clipboard.writeText(mcp.value.configJson || '')
-    alert('MCP 配置已复制')
-  } catch (_) {
-    const ta = document.createElement('textarea')
-    ta.value = mcp.value.configJson || ''
-    document.body.appendChild(ta)
-    ta.select()
-    document.execCommand('copy')
-    document.body.removeChild(ta)
-    alert('MCP 配置已复制')
+  try { await navigator.clipboard.writeText(mcp.value.configJson || '') } catch (_) {
+    const ta = document.createElement('textarea'); ta.value = mcp.value.configJson || ''; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
   }
+  await showAlert('MCP 配置已复制')
 }
-
-function recordKey(name) {
-  recordingName.value = name
-  recordingKey.value = true
-  window.addEventListener('keydown', onKeyDown, true)
-}
-
-function onKeyDown(e) {
-  e.preventDefault()
-  e.stopPropagation()
-  if (e.key === 'Escape') {
-    finishRecord(null)
-    return
-  }
+function recordKey(name) { recordingName.value = name; recordingKey.value = true; window.addEventListener('keydown', onKeyDown, true) }
+async function onKeyDown(e) {
+  e.preventDefault(); e.stopPropagation()
+  if (e.key === 'Escape') return finishRecord(null)
   const mods = []
   if (e.ctrlKey) mods.push('CommandOrControl')
   if (e.shiftKey) mods.push('Shift')
@@ -365,66 +261,70 @@ function onKeyDown(e) {
   const isFunctionKey = /^F([1-9]|1[0-9]|2[0-4])$/.test(key)
   if (mods.length === 0 && !isFunctionKey) return
   const combo = [...mods, key].join('+')
-  if (/(Shift|Alt)\+[0-9]$/.test(combo)) {
-    alert('数字组合在 Windows 全局快捷键里容易撞系统/显卡/桌面热键，建议用 F8/F9/F10 这类功能键。')
-    return
-  }
+  if (/(Shift|Alt)\+[0-9]$/.test(combo)) return showAlert('数字组合在 Windows 全局快捷键里容易撞系统/显卡/桌面热键，建议用 F8/F9/F10 这类功能键。')
   finishRecord(combo)
 }
-
 async function applyShortcut(name, combo) {
   try {
     await api('settings:set', { key: `shortcuts.${name}`, value: combo || '' })
     shortcuts.value[name] = combo || ''
-    alert(combo ? `快捷键已更新：${combo}` : '快捷键已清空')
-  } catch (e) {
-    alert(`快捷键设置失败：${e.message}`)
-  }
+    await showAlert(combo ? `快捷键已更新：${combo}` : '快捷键已清空')
+  } catch (e) { await showAlert(`快捷键设置失败：${e.message}`, '快捷键设置失败') }
 }
-function clearShortcut(name) {
-  if (!confirm(`清空「${labelOf(name)}」快捷键？`)) return
+async function clearShortcut(name) {
+  const ok = await showConfirm(`清空「${labelOf(name)}」快捷键？`, { title: '清空快捷键', confirmText: '清空' })
+  if (!ok) return
   applyShortcut(name, '')
 }
-function finishRecord(combo) {
-  window.removeEventListener('keydown', onKeyDown, true)
-  recordingKey.value = false
-  const name = recordingName.value
-  recordingName.value = ''
-  if (combo) applyShortcut(name, combo)
-}
-
-onMounted(() => {
-  load()
-})
+function finishRecord(combo) { window.removeEventListener('keydown', onKeyDown, true); recordingKey.value = false; const name = recordingName.value; recordingName.value = ''; if (combo) applyShortcut(name, combo) }
+onMounted(load)
 </script>
 
 <style scoped>
-h2 { font-size: 18px; font-weight: 500; }
-.settings-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
-.section { margin-bottom: 16px; }
-.section h3 { font-size: 14px; font-weight: 500; margin-bottom: 12px; color: var(--gold); }
-.row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; font-size: 13px; }
-.row span:first-child { min-width: 110px; }
-code { font-family: ui-monospace, monospace; font-size: 12px; color: var(--green); background: var(--bg-panel-solid); padding: 2px 8px; border-radius: 4px; }
-.input { width: auto; }
-.input.time { width: 110px; }
-.btn.mini { padding: 2px 10px; font-size: 12px; }
-.record-hint { margin-top: 8px; font-size: 12px; }
-select.input { width: 130px; }
-.tag-row { gap: 8px; }
-.color-dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.25); flex-shrink: 0; }
-.tag-name { min-width: 56px; }
-.break-label { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-dim); }
-.add-tag { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
-.add-tag .input:first-child { flex: 1; min-width: 120px; }
-.hint { font-size: 12px; margin-top: 8px; }
-.mcp-config {
-  width: 100%;
-  min-height: 220px;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  resize: vertical;
-}
-.mcp-actions { display: flex; gap: 8px; margin-top: 10px; }
+.settings-page { max-width: 1180px; margin: 0 auto; }
+.settings-hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; padding: 18px 20px; border: 1px solid var(--border); border-radius: 18px; background: linear-gradient(135deg, rgba(224,188,114,.12), rgba(127,169,140,.07)); backdrop-filter: blur(14px); }
+.settings-hero h2 { font-size: 24px; font-weight: 800; margin: 2px 0 6px; }
+.eyebrow { color: var(--green); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 4px; }
+.settings-layout { display: grid; grid-template-columns: 188px minmax(0, 1fr); gap: 16px; align-items: start; }
+.settings-nav { position: sticky; top: 86px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+.settings-nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 11px; border-radius: 11px; color: var(--text-dim); text-decoration: none; }
+.settings-nav-item:hover { background: var(--bg-hover); color: var(--text-main); }
+.settings-nav-item span { color: var(--gold); }
+.settings-main { display: flex; flex-direction: column; gap: 16px; }
+.settings-section { padding: 18px; border-radius: 18px; }
+.section-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+.section-head h3 { font-size: 17px; font-weight: 700; color: var(--text-main); }
+.setting-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.setting-item, .setting-row, .compact-row, .tag-row { border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.045); border-radius: 12px; padding: 10px 12px; }
+.setting-item { display: flex; align-items: center; gap: 10px; min-height: 42px; }
+.setting-item.wide { grid-column: 1 / -1; }
+.setting-item span, .compact-row span { min-width: 92px; color: var(--text-dim); font-size: 12px; }
+.setting-row { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 10px; }
+.setting-row p { margin-top: 4px; font-size: 12px; line-height: 1.5; }
+.sub-card { margin-top: 12px; padding: 12px; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; background: rgba(0,0,0,.08); }
+.sub-title { color: var(--gold); font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+.compact-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.form-grid label, .privacy-card label { display: flex; flex-direction: column; gap: 6px; color: var(--text-dim); font-size: 12px; }
+code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; color: var(--green); background: var(--bg-panel-solid); padding: 3px 8px; border-radius: 6px; word-break: break-all; }
+.input { width: 100%; }
+.mini-input { width: 96px; }
+.btn.mini { padding: 3px 10px; font-size: 12px; }
+.switch { position: relative; width: 42px; height: 24px; display: inline-block; flex: 0 0 auto; }
+.switch input { display: none; }
+.switch i { position: absolute; inset: 0; border-radius: 999px; background: rgba(255,255,255,.13); border: 1px solid rgba(255,255,255,.12); transition: .16s; }
+.switch i::after { content: ''; position: absolute; width: 18px; height: 18px; left: 2px; top: 2px; border-radius: 999px; background: var(--text-dim); transition: .16s; }
+.switch input:checked + i { background: rgba(224,188,114,.24); border-color: rgba(224,188,114,.42); }
+.switch input:checked + i::after { transform: translateX(18px); background: var(--gold); }
+.tag-row { display: grid; grid-template-columns: 18px minmax(80px, 1fr) 46px 90px 120px auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+.color-dot { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(255,255,255,.25); }
+.break-label { display: inline-flex; align-items: center; gap: 5px; color: var(--text-dim); font-size: 12px; }
+.add-tag { display: grid; grid-template-columns: minmax(120px, 1fr) 46px 96px 120px auto; gap: 8px; align-items: center; }
+.record-hint, .hint { font-size: 12px; margin-top: 8px; }
+.list-input { resize: vertical; min-height: 70px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.privacy-card { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.privacy-card .sub-title { grid-column: 1 / -1; }
+.notice-box { margin-bottom: 12px; border: 1px solid rgba(127,169,140,.28); background: rgba(127,169,140,.10); color: var(--text-main); border-radius: 12px; padding: 10px 12px; font-size: 13px; }
+.mcp-config { width: 100%; min-height: 190px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; line-height: 1.5; resize: vertical; margin-bottom: 10px; }
+@media (max-width: 920px) { .settings-layout { grid-template-columns: 1fr; } .settings-nav { position: static; flex-direction: row; flex-wrap: wrap; } .setting-grid, .form-grid, .privacy-card { grid-template-columns: 1fr; } .tag-row, .add-tag { grid-template-columns: 1fr; } }
 </style>

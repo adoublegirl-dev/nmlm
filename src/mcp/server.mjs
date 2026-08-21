@@ -34,6 +34,38 @@ function parseDueAt(v) {
   return n
 }
 
+function parseTime(v, label) {
+  if (v == null || v === '') return undefined
+  if (typeof v === 'number') {
+    if (!Number.isFinite(v)) throw new Error(`${label} 不是合法时间`)
+    return v
+  }
+  const n = new Date(v).getTime()
+  if (!Number.isFinite(n)) throw new Error(`${label} 不是合法时间`)
+  return n
+}
+
+function dayRange(dateLike) {
+  const d = dateLike ? new Date(dateLike) : new Date()
+  if (!Number.isFinite(d.getTime())) throw new Error('date 不是合法日期')
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+  return { start, end: start + 86400000 }
+}
+
+function resolveRange(a = {}) {
+  if (a.date && (a.start == null && a.end == null)) return dayRange(a.date)
+  const today = dayRange()
+  return {
+    start: parseTime(a.start, 'start') ?? today.start,
+    end: parseTime(a.end, 'end') ?? today.end
+  }
+}
+
+function applyLimit(items, limit = 100) {
+  const n = Math.max(1, Math.min(500, Number(limit || 100)))
+  return items.slice(0, n)
+}
+
 const todoShape = {
   id: { type: 'number' },
   title: { type: 'string' },
@@ -43,7 +75,7 @@ const todoShape = {
   dueAt: { type: 'string', description: '截止时间 ISO/本地时间字符串；传空字符串可清空' }
 }
 
-const server = new Server({ name: 'nmlm-todo', version: '0.2.0' }, { capabilities: { tools: {} } })
+const server = new Server({ name: 'nmlm', version: '0.2.1' }, { capabilities: { tools: {} } })
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
@@ -107,6 +139,36 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       name: 'nmlm_task_current',
       description: '查看当前正在记录的任务片段。',
       inputSchema: { type: 'object', properties: {} }
+    },
+    {
+      name: 'nmlm_ledger_list',
+      description: '查询牛马联盟正式台账。台账是用户确认后的正式工时记录，活动轨迹只作辅助线索。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          date: { type: 'string', description: '可选，某一天，如 2026-08-11；提供后默认查询该日' },
+          start: { type: ['string', 'number'], description: '可选，开始时间 ISO/本地时间字符串或毫秒时间戳' },
+          end: { type: ['string', 'number'], description: '可选，结束时间 ISO/本地时间字符串或毫秒时间戳' },
+          includeCurrent: { type: 'boolean', default: true },
+          limit: { type: 'number', default: 100 }
+        }
+      }
+    },
+    {
+      name: 'nmlm_evidence_list',
+      description: '查询牛马联盟证据库索引。只读查询，不导入、不修改 raw 原始证据。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          date: { type: 'string', description: '可选，某一天，如 2026-08-11；提供后默认查询该日' },
+          start: { type: ['string', 'number'], description: '可选，开始时间 ISO/本地时间字符串或毫秒时间戳' },
+          end: { type: ['string', 'number'], description: '可选，结束时间 ISO/本地时间字符串或毫秒时间戳' },
+          status: { type: 'string', description: '可选，按状态过滤，如 captured/imported/pending_review/reviewed/invalid/unsupported' },
+          type: { type: 'string', description: '可选，按类型过滤，如 screenshot/image/pdf/docx/video/archive/unknown' },
+          ledgerEntryId: { type: 'number', description: '可选，只看关联某条台账的证据' },
+          limit: { type: 'number', default: 100 }
+        }
+      }
     }
   ]
 }))
@@ -128,6 +190,23 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   if (name === 'nmlm_todo_reopen') return text(await call('todos:reopen', { id: a.id, status: a.status || 'todo' }))
   if (name === 'nmlm_todo_delete') return text(await call('todos:delete', { id: a.id }))
   if (name === 'nmlm_task_current') return text(await call('ledger:current'))
+  if (name === 'nmlm_ledger_list') {
+    const range = resolveRange(a)
+    if (range.end <= range.start) throw new Error('结束时间必须晚于开始时间')
+    const r = await call('ledger:list', range)
+    const entries = applyLimit((r.entries || []).filter((e) => a.includeCurrent !== false || e.end_time), a.limit)
+    return text({ ok: true, range, entries })
+  }
+  if (name === 'nmlm_evidence_list') {
+    const range = resolveRange(a)
+    if (range.end <= range.start) throw new Error('结束时间必须晚于开始时间')
+    const r = await call('evidence:list', range)
+    let items = r.screenshots || r.items || []
+    if (a.status) items = items.filter((x) => x.status === a.status || x.review_status === a.status)
+    if (a.type) items = items.filter((x) => x.type === a.type || x.source_type === a.type)
+    if (a.ledgerEntryId != null) items = items.filter((x) => Number(x.ledger_entry_id) === Number(a.ledgerEntryId))
+    return text({ ok: true, range, evidence: applyLimit(items, a.limit), note: '只读查询结果；MCP 不提供证据导入，raw 原始证据不会被修改。' })
+  }
   throw new Error(`未知工具：${name}`)
 })
 

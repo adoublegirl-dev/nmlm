@@ -40,6 +40,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { api } from '../api'
+import { showAlert, showConfirm } from '../utils/dialog'
 
 const list = ref([])
 const showAdd = ref(false)
@@ -91,12 +92,13 @@ async function save() {
     form.value = { name: '', url: '', group: '效率' }
     await load()
   } catch (e) {
-    alert(e.message)
+    await showAlert(e.message, '保存失败')
   }
 }
 
 async function remove(id) {
-  if (!confirm('删除该工具入口？')) return
+  const ok = await showConfirm('删除该工具入口？', { title: '删除工具入口', confirmText: '删除', danger: true })
+  if (!ok) return
   await api('tools:delete', { id })
   await load()
 }

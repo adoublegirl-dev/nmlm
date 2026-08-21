@@ -163,6 +163,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { api, on } from '../api'
 import { formatDate } from '../utils/format'
+import { showAlert } from '../utils/dialog'
 
 const DAY_MS = 86400000
 const curDate = ref(Date.now())
@@ -306,7 +307,7 @@ async function capture() {
     await api('evidence:capture')
     await load()
   } catch (e) {
-    alert(`截图失败：${e.message}`)
+    await showAlert(`截图失败：${e.message}`, '截图失败')
   } finally {
     capturing.value = false
   }
@@ -331,11 +332,11 @@ async function exportMarkdown() {
   const start = new Date(exportForm.value.startDate + 'T00:00:00').getTime()
   const end = new Date(exportForm.value.endDate + 'T00:00:00').getTime() + DAY_MS
   if (!exportForm.value.startDate || !exportForm.value.endDate || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
-    alert('导出日期范围不合法')
+    await showAlert('导出日期范围不合法')
     return
   }
   if (startOfDay(start) > startOfDay(Date.now()) || startOfDay(end - DAY_MS) > startOfDay(Date.now())) {
-    alert('不能导出未来日期的证据链')
+    await showAlert('不能导出未来日期的证据链')
     return
   }
   try {
@@ -346,16 +347,16 @@ async function exportMarkdown() {
       includeStatus: exportForm.value.includeStatus
     })
     exportingEvidence.value = false
-    alert(`已生成证据链：${r.markdownPath}`)
+    await showAlert(`已生成证据链：${r.markdownPath}`)
   } catch (e) {
-    alert(`导出失败：${e.message}`)
+    await showAlert(`导出失败：${e.message}`, '导出失败')
   }
 }
 async function importFiles() {
   if (!importDate.value) return
   const evidenceDate = archiveTimeFromDateInput(importDate.value)
   if (!evidenceDate) {
-    alert('不能导入到未来日期的证据目录')
+    await showAlert('不能导入到未来日期的证据目录')
     return
   }
   importing.value = true
@@ -365,7 +366,7 @@ async function importFiles() {
     curDate.value = new Date(importDate.value + 'T00:00:00').getTime()
     await load()
   } catch (e) {
-    alert(`导入失败：${e.message}`)
+    await showAlert(`导入失败：${e.message}`, '导入失败')
   } finally {
     importing.value = false
   }
@@ -385,7 +386,7 @@ async function openEvidenceFolder(s) {
   try {
     await api('evidence:openFolder', { id: s.evidence_id || null, filePath: s.file_path || s.original_path || null })
   } catch (e) {
-    alert(`打开失败：${e.message}`)
+    await showAlert(`打开失败：${e.message}`, '打开失败')
   }
 }
 async function saveReview() {
@@ -401,9 +402,9 @@ async function saveReview() {
     })
     previewing.value = { ...previewing.value, ...(r.evidence || {}) }
     await load()
-    alert('已保存复核')
+    await showAlert('已保存复核')
   } catch (e) {
-    alert(`保存失败：${e.message}`)
+    await showAlert(`保存失败：${e.message}`, '保存失败')
   }
 }
 

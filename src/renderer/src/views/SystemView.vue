@@ -74,6 +74,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { api } from '../api'
+import { showAlert, showConfirm } from '../utils/dialog'
 
 const diagnostics = ref({})
 const update = ref({ status: 'idle' })
@@ -91,22 +92,30 @@ async function loadAll() {
   autoCheck.value = !!s.settings?.update?.autoCheck
   updateChannel.value = s.settings?.update?.channel || 'stable'
 }
-async function exportDiagnostic() { const r = await api('lifecycle:exportReport'); if (!r.canceled) alert(`诊断报告已保存：${r.filePath}`) }
+async function exportDiagnostic() { const r = await api('lifecycle:exportReport'); if (!r.canceled) await showAlert(`诊断报告已保存：${r.filePath}`) }
 async function openBackups() { await api('lifecycle:openBackups') }
-async function relocateEvidence() { const r = await api('evidence:relocate'); if (!r.canceled) { alert(`已连接证据库；重建 ${r.inserted || 0} 条索引。`); await loadAll() } }
-async function rebuildEvidence() { const r = await api('evidence:rebuildIndex'); alert(`扫描 ${r.scanned || 0} 个 meta，新增 ${r.inserted || 0} 条，错误 ${(r.errors || []).length} 条。`); await loadAll() }
-async function exportConfig() { const r = await api('settings:export'); if (!r.canceled) alert(`配置已导出：${r.filePath}`) }
-async function importConfig() { const r = await api('settings:import'); if (!r.canceled && confirm('配置已导入，需要重启应用。现在重启？')) await api('lifecycle:restart') }
-async function backupNow() { await api('lifecycle:backup'); await loadAll(); alert('数据库备份完成') }
+async function relocateEvidence() { const r = await api('evidence:relocate'); if (!r.canceled) { await showAlert(`已连接证据库；重建 ${r.inserted || 0} 条索引。`); await loadAll() } }
+async function rebuildEvidence() { const r = await api('evidence:rebuildIndex'); await showAlert(`扫描 ${r.scanned || 0} 个 meta，新增 ${r.inserted || 0} 条，错误 ${(r.errors || []).length} 条。`); await loadAll() }
+async function exportConfig() { const r = await api('settings:export'); if (!r.canceled) await showAlert(`配置已导出：${r.filePath}`) }
+async function importConfig() {
+  const r = await api('settings:import')
+  if (!r.canceled) {
+    const ok = await showConfirm('配置已导入，需要重启应用。现在重启？', { title: '重启应用', confirmText: '重启' })
+    if (ok) await api('lifecycle:restart')
+  }
+}
+async function backupNow() { await api('lifecycle:backup'); await loadAll(); await showAlert('数据库备份完成') }
 async function restoreBackup(b) {
-  if (!confirm(`恢复 ${backupTime(b.createdAt)} 的数据库备份？当前数据库会在重启前先保留，证据原件不会被修改。`)) return
+  const ok = await showConfirm(`恢复 ${backupTime(b.createdAt)} 的数据库备份？当前数据库会在重启前先保留，证据原件不会被修改。`, { title: '恢复数据库备份', confirmText: '恢复', danger: true })
+  if (!ok) return
   await api('lifecycle:restore', { backupId: b.id })
-  if (confirm('恢复任务已安排，必须重启应用才能生效。现在重启？')) await api('lifecycle:restart')
+  const restart = await showConfirm('恢复任务已安排，必须重启应用才能生效。现在重启？', { title: '重启生效', confirmText: '重启' })
+  if (restart) await api('lifecycle:restart')
 }
 async function saveUpdateSetting(key, value) { await api('settings:set', { key: `update.${key}`, value }) }
-async function checkUpdate() { busy.value = true; try { update.value = await api('update:check') } catch (e) { alert(`检查失败：${e.message}`) } finally { busy.value = false } }
-async function downloadUpdate() { busy.value = true; try { update.value = await api('update:download'); if (update.value.status === 'downloaded') alert('更新包下载并校验完成') } catch (e) { alert(`下载失败：${e.message}`) } finally { busy.value = false } }
-async function installUpdate() { if (!confirm('将启动新版安装器并退出牛马联盟。继续？')) return; await api('update:install') }
+async function checkUpdate() { busy.value = true; try { update.value = await api('update:check') } catch (e) { await showAlert(`检查失败：${e.message}`, '检查失败') } finally { busy.value = false } }
+async function downloadUpdate() { busy.value = true; try { update.value = await api('update:download'); if (update.value.status === 'downloaded') await showAlert('更新包下载并校验完成') } catch (e) { await showAlert(`下载失败：${e.message}`, '下载失败') } finally { busy.value = false } }
+async function installUpdate() { const ok = await showConfirm('将启动新版安装器并退出牛马联盟。继续？', { title: '安装更新', confirmText: '安装并退出' }); if (!ok) return; await api('update:install') }
 
 onMounted(loadAll)
 </script>

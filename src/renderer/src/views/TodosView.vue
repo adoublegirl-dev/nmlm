@@ -74,6 +74,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { api, on } from '../api'
+import { showConfirm } from '../utils/dialog'
 
 const todos = ref([])
 const status = ref(null)
@@ -126,7 +127,12 @@ async function save() {
 async function setDoing(t) { await api('todos:update', { id: t.id, status: t.status === 'doing' ? 'todo' : 'doing' }); await load() }
 async function close(id) { await api('todos:close', { id }); await load() }
 async function reopen(id) { await api('todos:reopen', { id, status: 'todo' }); await load() }
-async function remove(id) { if (!confirm('删除待办？')) return; await api('todos:delete', { id }); await load() }
+async function remove(id) {
+  const ok = await showConfirm('删除待办？', { title: '删除待办', confirmText: '删除', danger: true })
+  if (!ok) return
+  await api('todos:delete', { id })
+  await load()
+}
 
 onMounted(() => { load(); on('todo:changed', () => load()) })
 </script>

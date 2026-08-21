@@ -149,7 +149,10 @@ const DEFAULT_SETTINGS = {
   },
   privacy: {
     blurSensitiveWindows: false,
-    sensitiveProcesses: ['chrome', 'msedge', 'wechat', 'dingtalk', 'qq']
+    sensitiveProcesses: ['wechat', 'weixin', 'dingtalk', 'qq'],
+    sensitiveTitlePatterns: ['身份证', '密码', '薪资', '工资', '隐私'],
+    activityIgnoredProcesses: ['lockapp', 'logonui', 'screensaver'],
+    activityIgnoredTitles: ['Program Manager']
   },
   model: {
     enabled: false,

@@ -17,20 +17,45 @@ function normalizeProcessName(name) {
   return String(name || '').trim().toLowerCase()
 }
 
+function normalizeList(list) {
+  if (Array.isArray(list)) return list.map((x) => String(x || '').trim()).filter(Boolean)
+  return String(list || '').split(/[\n,，]/).map((x) => x.trim()).filter(Boolean)
+}
+
+function stripExe(name) {
+  return normalizeProcessName(name).replace(/\.exe$/, '')
+}
+
+function isProcessInList(processName, list) {
+  const p = stripExe(processName)
+  return normalizeList(list).map(stripExe).includes(p)
+}
+
 function isSensitiveProcess(processName) {
-  const list = settings.get('privacy.sensitiveProcesses') || []
-  const p = normalizeProcessName(processName).replace(/\.exe$/, '')
-  return list.map((x) => normalizeProcessName(x).replace(/\.exe$/, '')).includes(p)
+  return isProcessInList(processName, settings.get('privacy.sensitiveProcesses') || [])
+}
+
+function titleMatches(title, list) {
+  const text = String(title || '').toLowerCase()
+  return normalizeList(list).some((pattern) => text.includes(String(pattern).toLowerCase()))
 }
 
 function isSystemIdleProcess(processName) {
-  const p = normalizeProcessName(processName).replace(/\.exe$/, '')
-  return ['lockapp', 'logonui', 'screensaver'].includes(p)
+  return isProcessInList(processName, settings.get('privacy.activityIgnoredProcesses') || ['lockapp', 'logonui', 'screensaver'])
+}
+
+function isIgnoredTitle(title) {
+  return titleMatches(title, settings.get('privacy.activityIgnoredTitles') || [])
+}
+
+function shouldRedactTitle(title, processName) {
+  if (!settings.get('privacy.blurSensitiveWindows')) return false
+  return isSensitiveProcess(processName) || titleMatches(title, settings.get('privacy.sensitiveTitlePatterns') || [])
 }
 
 function redactTitle(title, processName) {
   if (!title) return null
-  if (settings.get('privacy.blurSensitiveWindows') && isSensitiveProcess(processName)) return '敏感窗口 · 已脱敏'
+  if (shouldRedactTitle(title, processName)) return '敏感窗口 · 已脱敏'
   return title
 }
 
@@ -42,8 +67,9 @@ async function tick() {
   const idleSec = Number(win?.idleSec || 0)
   const idleThresholdSec = Math.max(30, Number(cfg.idleThresholdSec || settings.get('reminder.idleThresholdSec') || 300))
   const processName = win ? win.processName : null
-  const isIdle = idleSec >= idleThresholdSec || isSystemIdleProcess(processName) ? 1 : 0
-  const title = redactTitle(win ? win.title : null, processName)
+  const rawTitle = win ? win.title : null
+  const isIdle = idleSec >= idleThresholdSec || isSystemIdleProcess(processName) || isIgnoredTitle(rawTitle) ? 1 : 0
+  const title = redactTitle(rawTitle, processName)
   activityRepo.insert({
     ts: now,
     windowTitle: title,
@@ -114,7 +140,7 @@ function buildActivitySegments(start, end, { minDurationSec = 30, gapMergeSec = 
     const atom = {
       start: sampleStart,
       end: sampleEnd,
-      isIdle: !!s.is_idle || isSystemIdleProcess(s.process_name),
+      isIdle: !!s.is_idle || isSystemIdleProcess(s.process_name) || isIgnoredTitle(s.window_title),
       processName: s.process_name || null,
       samples: [s]
     }
