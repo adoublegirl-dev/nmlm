@@ -6,11 +6,12 @@ const require = createRequire(import.meta.url)
 
 const db = require('../src/main/db')
 const ledger = require('../src/main/services/ledger')
+const activity = require('../src/main/services/activity')
 const report = require('../src/main/services/report')
 const todos = require('../src/main/services/todos')
 const { startOfDay, endOfDay, formatDuration, dayRange } = require('../src/main/utils/time')
 
-const { entriesRepo, pausePointsRepo, evidenceRepo } = db
+const { entriesRepo, pausePointsRepo, evidenceRepo, activityRepo } = db
 
 // 每个用例用独立内存库；窗口采集替换为空实现（避免真调 PowerShell 与缓存干扰）
 beforeEach(() => {
@@ -547,6 +548,56 @@ describe('evidence 证据库索引', () => {
     expect(updated.user_note).toBe('可用于证据链')
     expect(review.review_status).toBe('reviewed')
     expect(review.confirmed_title).toBe('已确认截图')
+  })
+})
+
+describe('activity 活动轨迹', () => {
+  it('活动线索按台账空白区间裁剪，转台账不覆盖已有记录', () => {
+    const base = new Date(2026, 7, 14, 9, 0, 0).getTime()
+    entriesRepo.insertFinished({
+      startTime: base + 30 * 60 * 1000,
+      endTime: base + 60 * 60 * 1000,
+      durationSec: 1800,
+      tagId: 1,
+      detail: '已有记录',
+      windowTitle: null,
+      isFragment: 0
+    })
+    activityRepo.insert({ ts: base, windowTitle: 'WPS 文档', processName: 'wps', isIdle: 0, idleSec: 0, inputActive: 1 })
+    activityRepo.insert({ ts: base + 20 * 60 * 1000, windowTitle: 'WPS 文档', processName: 'wps', isIdle: 0, idleSec: 0, inputActive: 1 })
+    activityRepo.insert({ ts: base + 70 * 60 * 1000, windowTitle: 'WPS 文档', processName: 'wps', isIdle: 0, idleSec: 0, inputActive: 1 })
+    const r = activity.listSuggestions({ start: base, end: base + 2 * 60 * 60 * 1000 })
+    expect(r.ok).toBe(true)
+    const unrecorded = r.suggestions.filter((x) => x.kind === 'unrecorded_active')
+    expect(unrecorded.length).toBeGreaterThan(0)
+    expect(unrecorded.some((x) => x.end <= base + 30 * 60 * 1000)).toBe(true)
+    expect(unrecorded.every((x) => !(x.start < base + 60 * 60 * 1000 && x.end > base + 30 * 60 * 1000))).toBe(true)
+    const first = unrecorded[0]
+    const created = activity.convertToLedger({ start: first.start, end: first.end, tagId: 1, detail: '轨迹补记' })
+    expect(created.ok).toBe(true)
+  })
+
+  it('记录内 idle 线索可切分正式台账，但原始轨迹保留', () => {
+    const base = new Date(2026, 7, 14, 13, 0, 0).getTime()
+    const entry = entriesRepo.insertFinished({
+      startTime: base,
+      endTime: base + 2 * 60 * 60 * 1000,
+      durationSec: 7200,
+      tagId: 1,
+      detail: '写方案',
+      windowTitle: null,
+      isFragment: 0
+    })
+    activityRepo.insert({ ts: base + 30 * 60 * 1000, windowTitle: 'WPS 文档', processName: 'wps', isIdle: 1, idleSec: 900, inputActive: 0 })
+    activityRepo.insert({ ts: base + 50 * 60 * 1000, windowTitle: 'WPS 文档', processName: 'wps', isIdle: 1, idleSec: 2100, inputActive: 0 })
+    const r = activity.listSuggestions({ start: base, end: base + 2 * 60 * 60 * 1000 })
+    const idle = r.suggestions.find((x) => x.kind === 'idle_inside_entry')
+    expect(idle).toBeTruthy()
+    const split = activity.applyIdleBreak({ entryId: entry.id, start: idle.start, end: idle.end })
+    expect(split.ok).toBe(true)
+    const rows = entriesRepo.listByRange(base - 1, base + 2 * 60 * 60 * 1000 + 1)
+    expect(rows.length).toBe(3)
+    expect(activityRepo.rawByRange(base, base + 2 * 60 * 60 * 1000).length).toBe(2)
   })
 })
 

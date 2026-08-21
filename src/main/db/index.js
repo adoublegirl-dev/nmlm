@@ -416,19 +416,35 @@ const packsRepo = {
 
 // ---------- 活动日志仓储 ----------
 const activityRepo = {
-  insert({ ts, windowTitle = null, processName = null, isIdle = 0 }) {
+  insert({ ts, windowTitle = null, processName = null, isIdle = 0, idleSec = 0, inputActive = 1 }) {
     getDb()
-      .prepare('INSERT INTO activity_log (ts, window_title, process_name, is_idle) VALUES (?, ?, ?, ?)')
-      .run(ts, windowTitle, processName, isIdle)
+      .prepare('INSERT INTO activity_log (ts, window_title, process_name, is_idle, idle_sec, input_active) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(ts, windowTitle, processName, isIdle ? 1 : 0, Math.max(0, Number(idleSec) || 0), inputActive ? 1 : 0)
+  },
+  rawByRange(start, end) {
+    return getDb()
+      .prepare('SELECT * FROM activity_log WHERE ts >= ? AND ts < ? ORDER BY ts')
+      .all(start, end)
   },
   listByRange(start, end, stepSec = 300) {
     // 按 step 聚合采样，供证据包使用
     return getDb()
       .prepare(
-        `SELECT (ts / ?) * ? AS bucket, MAX(window_title) AS window_title, MAX(is_idle) AS is_idle, COUNT(*) AS samples
+        `SELECT (ts / ?) * ? AS bucket, MAX(window_title) AS window_title, MAX(is_idle) AS is_idle, MAX(idle_sec) AS idle_sec, COUNT(*) AS samples
          FROM activity_log WHERE ts >= ? AND ts < ? GROUP BY bucket ORDER BY bucket`
       )
       .all(stepSec * 1000, stepSec * 1000, start, end)
+  },
+  ignore({ signature, start, end, reason = null }) {
+    getDb()
+      .prepare('INSERT INTO activity_ignored_suggestions (signature, start_time, end_time, reason, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(signature) DO UPDATE SET reason = excluded.reason')
+      .run(signature, start, end, reason, Date.now())
+    return { ok: true }
+  },
+  ignoredByRange(start, end) {
+    return getDb()
+      .prepare('SELECT * FROM activity_ignored_suggestions WHERE start_time < ? AND end_time > ? ORDER BY start_time')
+      .all(end, start)
   }
 }
 

@@ -28,7 +28,7 @@
       <div class="cutdesk-head">
         <div>
           <h3>今日剪辑台</h3>
-          <p class="muted">一条轨道看完这一天，色块是记录，刀口是中途节点。</p>
+          <p class="muted">一条轨道看完这一天：实体色块是正式台账，半透明虚线是活动轨迹线索。</p>
         </div>
         <div class="zoom-tools">
           <span class="muted num">00:00 – 24:00</span>
@@ -39,7 +39,7 @@
           <span class="zoom-readout num">{{ timelineZoomText }}</span>
         </div>
       </div>
-      <div v-if="!segments.length" class="empty muted">这一天还没有记录，按 F8 开始</div>
+      <div v-if="!segments.length && !activitySuggestions.length" class="empty muted">这一天还没有记录，也还没有活动轨迹</div>
       <div v-else class="day-timeline" @wheel.prevent="handleTimelineWheel">
         <div
           class="timeline-scroll"
@@ -77,8 +77,56 @@
                 :title="node.title"
                 @click="openClipFromTimeline(node.entry)"
               ><span>{{ node.shortText }}</span></button>
+              <div class="activity-lane-label">活动轨迹</div>
+              <button
+                v-for="a in activityClips"
+                :key="a.signature"
+                class="activity-clip"
+                :class="[a.kind, { idle: a.isIdle }]"
+                :style="{ left: a.left + '%', width: a.width + '%' }"
+                :title="a.titleText"
+                @click="focusActivitySuggestion(a.signature)"
+              >
+                <span class="activity-dot"></span>
+                <span class="activity-text">{{ a.shortLabel }}</span>
+              </button>
               <span v-if="isToday" class="now-line" :style="{ left: nowLeft + '%' }"><b>现在</b></span>
             </div>
+          </div>
+        </div>
+      </div>
+      <div v-if="actionableActivitySuggestions.length" class="activity-panel">
+        <div class="activity-panel-head">
+          <div>
+            <div class="section-title">活动线索</div>
+            <div class="muted activity-help">轨迹只作为参考流水，不自动计入工时；补记时会按空白区间裁剪，避免和正式台账重叠。</div>
+          </div>
+        </div>
+        <div
+          v-for="a in actionableActivitySuggestions"
+          :key="a.signature"
+          class="activity-row"
+          :class="a.kind"
+          :data-activity-signature="a.signature"
+        >
+          <div class="activity-main">
+            <span class="activity-kind">{{ activityKindText(a) }}</span>
+            <span class="num activity-time">{{ formatActivityRange(a) }}</span>
+            <span class="activity-title">{{ a.title || a.processName || '未知活动' }}</span>
+            <span class="muted">{{ formatDuration(a.durationSec) }}</span>
+          </div>
+          <div class="activity-controls">
+            <template v-if="a.kind === 'unrecorded_active'">
+              <select class="input activity-select" v-model.number="activityForms[a.signature].tagId">
+                <option v-for="t in tags" :key="t.id" :value="t.id">{{ t.name }}</option>
+              </select>
+              <input class="input activity-note" v-model="activityForms[a.signature].detail" placeholder="补记备注，可留空" />
+              <button class="btn small primary" @click="convertActivityToLedger(a)">补记为台账</button>
+            </template>
+            <template v-else-if="a.kind === 'idle_inside_entry'">
+              <button class="btn small primary" @click="applyActivityIdleBreak(a)">按轨迹切分</button>
+            </template>
+            <button class="btn small" @click="ignoreActivity(a)">忽略</button>
           </div>
         </div>
       </div>
@@ -210,6 +258,8 @@ const DAY_MS = 86400000
 const WORK_START_HOUR = 8
 const curDate = ref(Date.now())
 const segments = ref([])
+const activitySuggestions = ref([])
+const activityForms = ref({})
 const recording = ref(false)
 const totalSec = ref(0)
 const effectiveSec = ref(0)
@@ -322,6 +372,21 @@ const timelineNodes = computed(() => {
     title: p.detail ? `${p.timeText} · ${p.detail}` : `${p.timeText} · 未说明`
   })))
 })
+const activityClips = computed(() => {
+  const start = startOfDay(curDate.value)
+  return activitySuggestions.value.map((a) => {
+    const left = clampPct(((a.start - start) / DAY_MS) * 100)
+    const width = Math.max(0.08, clampPct(((a.end - a.start) / DAY_MS) * 100))
+    return {
+      ...a,
+      left,
+      width,
+      shortLabel: a.isIdle ? 'idle' : (a.processName || '活动'),
+      titleText: `${activityKindText(a)} · ${formatActivityRange(a)} · ${a.title || a.processName || ''}`
+    }
+  })
+})
+const actionableActivitySuggestions = computed(() => activitySuggestions.value.filter((a) => a.kind === 'unrecorded_active' || a.kind === 'idle_inside_entry'))
 
 function goToday() {
   curDate.value = Date.now()
@@ -562,6 +627,9 @@ async function load({ focusWorkStart = false } = {}) {
     totalSec.value = raw.reduce((s, e) => s + (e.viewDurationSec || 0), 0)
     effectiveSec.value = eff.sec
     fragments.value = raw.filter((e) => e.is_fragment).length
+    const act = await api('activity:suggestions', { start, end }).catch(() => ({ suggestions: [] }))
+    activitySuggestions.value = (act.suggestions || []).map((a) => ({ ...a }))
+    ensureActivityForms()
     const cur = await api('ledger:current')
     recording.value = !!cur.entry
     if (focusWorkStart) requestWorkStartFocus()
@@ -631,6 +699,63 @@ function decorateEntryTimeline(entry, tagMap) {
   ]
   entry.nodeCount = entry.timeNodes.length
   entry.trackTitle = `${entry.startText} – ${entry.endText} · ${entry.durText}`
+}
+
+function ensureActivityForms() {
+  const next = { ...activityForms.value }
+  const fallbackTagId = tags.value.find((t) => !t.is_break)?.id || tags.value[0]?.id || null
+  for (const a of activitySuggestions.value) {
+    if (!next[a.signature]) {
+      next[a.signature] = {
+        tagId: fallbackTagId,
+        detail: a.kind === 'unrecorded_active' ? `根据活动轨迹补记：${a.title || a.processName || '电脑活动'}` : ''
+      }
+    }
+  }
+  activityForms.value = next
+}
+function activityKindText(a) {
+  if (a.kind === 'unrecorded_active') return '未记录活动'
+  if (a.kind === 'idle_inside_entry') return '记录中疑似离开'
+  if (a.kind === 'entry_context') return '记录内活动'
+  return '活动轨迹'
+}
+function formatActivityRange(a) {
+  return `${formatTime(a.start, { seconds: true })} – ${formatTime(a.end, { seconds: true })}`
+}
+function focusActivitySuggestion(signature) {
+  const el = document.querySelector(`[data-activity-signature="${CSS.escape(signature)}"]`)
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+async function convertActivityToLedger(a) {
+  const form = activityForms.value[a.signature] || {}
+  const ok = confirm(`将 ${formatActivityRange(a)} 补记为台账？\n\n该操作只补当前空白区间，不会覆盖已有台账。`)
+  if (!ok) return
+  const r = await api('activity:convertToLedger', {
+    start: a.start,
+    end: a.end,
+    tagId: form.tagId,
+    detail: form.detail?.trim() || null
+  })
+  if (!r.ok) return alert(r.error || '补记失败')
+  await load({ focusWorkStart: false })
+}
+async function applyActivityIdleBreak(a) {
+  const ok = confirm(`按活动轨迹把 ${formatActivityRange(a)} 标为疑似离开？\n\n系统会在正式台账中添加两个切点，原始轨迹不会被修改。`)
+  if (!ok) return
+  const r = await api('activity:applyIdleBreak', {
+    entryId: a.entryId,
+    start: a.start,
+    end: a.end,
+    detail: '活动轨迹显示这段可能离开电脑'
+  })
+  if (!r.ok) return alert(r.error || '切分失败')
+  await load({ focusWorkStart: false })
+}
+async function ignoreActivity(a) {
+  const r = await api('activity:ignore', a)
+  if (!r.ok) return alert(r.error || '忽略失败')
+  activitySuggestions.value = activitySuggestions.value.filter((x) => x.signature !== a.signature)
 }
 
 function scrollTimelineToWorkStart() {
@@ -872,8 +997,9 @@ onBeforeUnmount(() => {
 .ruler-tick.minor { bottom: 10px; background: rgba(255,255,255,0.045); }
 .ruler-tick.major { background: rgba(224,188,114,0.24); }
 .ruler-tick span { position: absolute; top: 9px; left: 4px; font-size: 10px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
-.master-track { position: relative; height: 188px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.08)); }
+.master-track { position: relative; height: 252px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.08)); }
 .master-track::before { content: ''; position: absolute; left: 0; right: 0; top: 96px; height: 1px; background: rgba(224,188,114,0.18); }
+.master-track::after { content: ''; position: absolute; left: 0; right: 0; bottom: 58px; height: 1px; background: rgba(127,169,140,0.20); }
 .clip { position: absolute; height: 22px; min-width: 0; border: 1px solid color-mix(in srgb, var(--clip-color) 72%, transparent); border-radius: 7px; background: color-mix(in srgb, var(--clip-color) 78%, rgba(32,35,41,0.94)); color: #fffaf0; cursor: pointer; overflow: hidden; text-align: left; padding: 3px 7px; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10); }
 .clip:hover { filter: brightness(1.08); }
 .clip::before { content: ''; position: absolute; inset: 0; pointer-events: none; background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.16) 0 3px, transparent 3px 7px); opacity: .28; }
@@ -899,8 +1025,29 @@ onBeforeUnmount(() => {
 .cut-marker.empty { border-left-color: rgba(241,162,143,0.68); color: #f1a28f; }
 .cut-marker.empty::after { background: #f1a28f; }
 .cut-marker.empty span { color: #f1a28f; border-color: rgba(241,162,143,.38); }
+.activity-lane-label { position: absolute; left: 10px; bottom: 34px; font-size: 10px; letter-spacing: .08em; color: rgba(127,169,140,.82); pointer-events: none; }
+.activity-clip { position: absolute; bottom: 28px; height: 18px; min-width: 2px; border-radius: 999px; border: 1px dashed rgba(127,169,140,.58); background: rgba(127,169,140,.15); color: rgba(230,244,235,.82); cursor: pointer; overflow: hidden; padding: 1px 6px; display: flex; align-items: center; gap: 5px; opacity: .82; backdrop-filter: blur(2px); }
+.activity-clip::before { content: ''; position: absolute; inset: 0; background-image: repeating-linear-gradient(90deg, rgba(255,255,255,.18) 0 2px, transparent 2px 7px); opacity: .34; pointer-events: none; }
+.activity-clip:hover { opacity: 1; filter: brightness(1.16); }
+.activity-clip.idle { border-color: rgba(241,162,143,.66); background: rgba(241,162,143,.14); color: #ffd6cd; }
+.activity-clip.entry_context { opacity: .45; bottom: 7px; height: 12px; }
+.activity-dot { position: relative; z-index: 1; width: 5px; height: 5px; border-radius: 999px; background: currentColor; box-shadow: 0 0 8px currentColor; flex: 0 0 auto; }
+.activity-text { position: relative; z-index: 1; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .now-line { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(127,169,140,0.88); }
 .now-line b { position: absolute; top: 9px; left: 6px; font-size: 10px; color: var(--green); font-weight: 500; white-space: nowrap; }
+.activity-panel { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(127,169,140,.20); display: flex; flex-direction: column; gap: 8px; }
+.activity-panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.activity-help { font-size: 12px; line-height: 1.5; }
+.activity-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px; border: 1px dashed rgba(127,169,140,.32); background: rgba(127,169,140,.07); }
+.activity-row.idle_inside_entry { border-color: rgba(241,162,143,.34); background: rgba(241,162,143,.07); }
+.activity-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.activity-kind { font-size: 12px; color: var(--green); border: 1px solid rgba(127,169,140,.32); background: rgba(127,169,140,.10); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
+.activity-row.idle_inside_entry .activity-kind { color: #f1a28f; border-color: rgba(241,162,143,.34); background: rgba(241,162,143,.10); }
+.activity-time { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+.activity-title { font-size: 12px; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.activity-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.activity-select { width: 108px; height: 30px; font-size: 12px; }
+.activity-note { width: 220px; height: 30px; font-size: 12px; }
 .section-title { font-size: 13px; color: var(--gold); margin-bottom: 3px; }
 .detail-toggle { margin-top: 0; }
 .detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }

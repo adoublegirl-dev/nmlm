@@ -43,6 +43,11 @@ const IPC = {
   REPORT_TAG_DISTRIBUTION: 'report:tagDistribution',
   REPORT_DAILY_TREND: 'report:dailyTrend',
   REPORT_EFFECTIVE_HOURS: 'report:effectiveHours',
+  // activity
+  ACTIVITY_SUGGESTIONS: 'activity:suggestions',
+  ACTIVITY_IGNORE: 'activity:ignore',
+  ACTIVITY_CONVERT_TO_LEDGER: 'activity:convertToLedger',
+  ACTIVITY_APPLY_IDLE_BREAK: 'activity:applyIdleBreak',
   // model
   MODEL_GENERATE_REPORT: 'model:generateReport',
   // tools
@@ -170,7 +175,11 @@ const DEFAULT_SETTINGS = {
     hiddenToTray: true
   },
   activity: {
-    pollIntervalSec: 30
+    enabled: true,
+    pollIntervalSec: 30,
+    idleThresholdSec: 300,
+    minSuggestionSec: 60,
+    gapMergeSec: 120
   },
   onboarding: {
     completed: false,

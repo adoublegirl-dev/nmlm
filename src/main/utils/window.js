@@ -9,9 +9,18 @@ Add-Type @"
 using System;
 using System.Runtime.InteropServices;
 public class WinFore {
+  [StructLayout(LayoutKind.Sequential)] public struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr h, System.Text.StringBuilder t, int c);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll")] public static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+  [DllImport("kernel32.dll")] public static extern uint GetTickCount();
+  public static uint IdleSeconds() {
+    LASTINPUTINFO lii = new LASTINPUTINFO();
+    lii.cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf(typeof(LASTINPUTINFO));
+    if (!GetLastInputInfo(ref lii)) return 0;
+    return (GetTickCount() - lii.dwTime) / 1000;
+  }
 }
 "@
 $h = [WinFore]::GetForegroundWindow()
@@ -20,7 +29,8 @@ $sb = New-Object System.Text.StringBuilder 512
 $pid2 = 0
 [WinFore]::GetWindowThreadProcessId($h, [ref]$pid2) | Out-Null
 $name = (Get-Process -Id $pid2 -ErrorAction SilentlyContinue).ProcessName
-if ($sb.ToString()) { Write-Output ("{0}|{1}" -f $sb.ToString(), $name) }
+$idle = [WinFore]::IdleSeconds()
+if ($sb.ToString()) { Write-Output ("{0}|{1}|{2}" -f $sb.ToString(), $name, $idle) }
 `
 
 let cachedPromise = null
@@ -42,8 +52,8 @@ function getActiveWindow(force = false) {
         return
       }
       const line = stdout.trim().split(/\r?\n/)[0]
-      const [title, processName] = line.split('|')
-      resolve({ title: title || null, processName: processName || null, at: Date.now() })
+      const [title, processName, idleSec] = line.split('|')
+      resolve({ title: title || null, processName: processName || null, idleSec: Number(idleSec) || 0, at: Date.now() })
     })
   })
 

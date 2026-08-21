@@ -203,6 +203,24 @@ const MIGRATIONS = [
         updated_at  INTEGER NOT NULL
       );
     `
+  },
+  {
+    version: 8,
+    name: 'activity-suggestions',
+    sql: `
+      ALTER TABLE activity_log ADD COLUMN idle_sec INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE activity_log ADD COLUMN input_active INTEGER NOT NULL DEFAULT 1;
+      CREATE INDEX IF NOT EXISTS idx_activity_process ON activity_log(process_name);
+
+      CREATE TABLE IF NOT EXISTS activity_ignored_suggestions (
+        signature   TEXT PRIMARY KEY,
+        start_time  INTEGER NOT NULL,
+        end_time    INTEGER NOT NULL,
+        reason      TEXT,
+        created_at  INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_activity_ignored_range ON activity_ignored_suggestions(start_time, end_time);
+    `
   }
 ]
 

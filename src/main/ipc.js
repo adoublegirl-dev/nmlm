@@ -109,6 +109,12 @@ function registerAll() {
   registerHandler(IPC.REPORT_DAILY_TREND, (a) => ({ ok: true, data: report.dailyTrend(a.month) }))
   registerHandler(IPC.REPORT_EFFECTIVE_HOURS, (a) => ({ ok: true, sec: report.effectiveHours(a.date) }))
 
+  // activity
+  registerHandler(IPC.ACTIVITY_SUGGESTIONS, (a) => activity.listSuggestions(a))
+  registerHandler(IPC.ACTIVITY_IGNORE, (a) => activity.ignoreSuggestion(a))
+  registerHandler(IPC.ACTIVITY_CONVERT_TO_LEDGER, (a) => activity.convertToLedger(a))
+  registerHandler(IPC.ACTIVITY_APPLY_IDLE_BREAK, (a) => activity.applyIdleBreak(a))
+
   // model（P2 占位）
   registerHandler('model:generateReport', () => ({ ok: false, error: '模型接入将在 P2 实现' }))
 

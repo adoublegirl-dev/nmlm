@@ -112,6 +112,28 @@
     </div>
 
     <div class="card section">
+      <h3>活动轨迹</h3>
+      <div class="row">
+        <span>启用被动活动记录</span>
+        <input type="checkbox" :checked="activity.enabled !== false" @change="setActivity('enabled', $event.target.checked)" />
+        <span class="muted">只记录前台应用、窗口标题和空闲秒数，不记录键盘输入内容。</span>
+      </div>
+      <div class="row">
+        <span>采样间隔（秒）</span>
+        <input class="input time" type="number" min="10" :value="activity.pollIntervalSec || 30" @change="setActivity('pollIntervalSec', Number($event.target.value))" />
+      </div>
+      <div class="row">
+        <span>空闲阈值（秒）</span>
+        <input class="input time" type="number" min="30" :value="activity.idleThresholdSec || 300" @change="setActivity('idleThresholdSec', Number($event.target.value))" />
+        <span class="muted">超过该时间没有键鼠输入时，轨迹会标记为疑似离开。</span>
+      </div>
+      <div class="row">
+        <span>最短线索（秒）</span>
+        <input class="input time" type="number" min="15" :value="activity.minSuggestionSec || 60" @change="setActivity('minSuggestionSec', Number($event.target.value))" />
+      </div>
+    </div>
+
+    <div class="card section">
       <h3>证据</h3>
       <div class="row">
         <span class="muted">原始证据</span>
@@ -179,6 +201,7 @@ const appVersion = ref('')
 const shortcuts = ref({})
 const reminder = ref({})
 const evidence = ref({})
+const activity = ref({})
 const model = ref({})
 const recorder = ref({})
 const mcp = ref({})
@@ -205,6 +228,7 @@ async function load() {
   shortcuts.value = s.shortcuts || {}
   reminder.value = s.reminder || {}
   evidence.value = s.evidence || {}
+  activity.value = s.activity || {}
   model.value = s.model || {}
   recorder.value = s.recorder || s.mini || {}
   const info = await api('server:info')
@@ -222,6 +246,11 @@ async function setReminder(key, val) {
 }
 async function setEvidence(key, val) {
   await api('settings:set', { key: `evidence.${key}`, value: val })
+  evidence.value[key] = val
+}
+async function setActivity(key, val) {
+  await api('settings:set', { key: `activity.${key}`, value: val })
+  activity.value[key] = val
 }
 async function setModel(key, val) {
   await api('settings:set', { key: `model.${key}`, value: val })
