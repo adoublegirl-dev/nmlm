@@ -37,6 +37,7 @@
           <button class="zoom-btn" :class="{ active: Math.abs(timelineZoom - 8) < 0.01 }" @click="setTimelineZoom(8)">8x</button>
           <button class="zoom-btn" :class="{ active: Math.abs(timelineZoom - 32) < 0.01 }" @click="setTimelineZoom(32)">32x</button>
           <span class="zoom-readout num">{{ timelineZoomText }}</span>
+          <button class="zoom-btn activity-toggle" :class="{ active: showActivityTrack }" @click="showActivityTrack = !showActivityTrack">{{ showActivityTrack ? '隐藏轨迹' : '显示轨迹' }}</button>
         </div>
       </div>
       <div v-if="!segments.length && !activitySuggestions.length" class="empty muted">这一天还没有记录，也还没有活动轨迹</div>
@@ -77,31 +78,35 @@
                 :title="node.title"
                 @click="openClipFromTimeline(node.entry)"
               ><span>{{ node.shortText }}</span></button>
-              <div class="activity-lane-label">活动轨迹</div>
-              <button
-                v-for="a in activityClips"
-                :key="a.signature"
-                class="activity-clip"
-                :class="[a.kind, { idle: a.isIdle }]"
-                :style="{ left: a.left + '%', width: a.width + '%' }"
-                :title="a.titleText"
-                @click="focusActivitySuggestion(a.signature)"
-              >
-                <span class="activity-dot"></span>
-                <span class="activity-text">{{ a.shortLabel }}</span>
-              </button>
+              <template v-if="showActivityTrack">
+                <div class="activity-lane-label">活动轨迹</div>
+                <button
+                  v-for="a in activityClips"
+                  :key="a.signature"
+                  class="activity-clip"
+                  :class="[a.kind, { idle: a.isIdle }]"
+                  :style="{ left: a.left + '%', width: a.width + '%' }"
+                  :title="a.titleText"
+                  @click="focusActivitySuggestion(a.signature)"
+                >
+                  <span class="activity-dot"></span>
+                  <span class="activity-text">{{ a.shortLabel }}</span>
+                </button>
+              </template>
               <span v-if="isToday" class="now-line" :style="{ left: nowLeft + '%' }"><b>现在</b></span>
             </div>
           </div>
         </div>
       </div>
-      <div v-if="actionableActivitySuggestions.length" class="activity-panel">
+      <div v-if="actionableActivitySuggestions.length" class="activity-panel" :class="{ collapsed: activityPanelCollapsed }">
         <div class="activity-panel-head">
           <div>
-            <div class="section-title">活动线索</div>
-            <div class="muted activity-help">轨迹只作为参考流水，不自动计入工时；补记时会按空白区间裁剪，避免和正式台账重叠。</div>
+            <div class="section-title">活动线索 <span class="activity-count">{{ activitySummaryText }}</span></div>
+            <div class="muted activity-help">轨迹只作为参考流水，不自动计入工时；补记时会按空白区间裁剪。</div>
           </div>
+          <button class="btn small" @click="activityPanelCollapsed = !activityPanelCollapsed">{{ activityPanelCollapsed ? '展开处理' : '收起线索' }}</button>
         </div>
+        <div v-if="!activityPanelCollapsed" class="activity-rows">
         <div
           v-for="a in actionableActivitySuggestions"
           :key="a.signature"
@@ -128,6 +133,7 @@
             </template>
             <button class="btn small" @click="ignoreActivity(a)">忽略</button>
           </div>
+        </div>
         </div>
       </div>
     </div>
@@ -260,6 +266,8 @@ const curDate = ref(Date.now())
 const segments = ref([])
 const activitySuggestions = ref([])
 const activityForms = ref({})
+const activityPanelCollapsed = ref(true)
+const showActivityTrack = ref(true)
 const recording = ref(false)
 const totalSec = ref(0)
 const effectiveSec = ref(0)
@@ -387,6 +395,15 @@ const activityClips = computed(() => {
   })
 })
 const actionableActivitySuggestions = computed(() => activitySuggestions.value.filter((a) => a.kind === 'unrecorded_active' || a.kind === 'idle_inside_entry'))
+const activitySummaryText = computed(() => {
+  const items = actionableActivitySuggestions.value
+  const unrecorded = items.filter((a) => a.kind === 'unrecorded_active').length
+  const idle = items.filter((a) => a.kind === 'idle_inside_entry').length
+  const parts = [`${items.length} 条`]
+  if (unrecorded) parts.push(`未记录 ${unrecorded}`)
+  if (idle) parts.push(`疑似离开 ${idle}`)
+  return parts.join(' / ')
+})
 
 function goToday() {
   curDate.value = Date.now()
@@ -986,6 +1003,7 @@ onBeforeUnmount(() => {
 .zoom-btn { height: 24px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); font-size: 11px; cursor: pointer; }
 .zoom-btn.active { color: var(--gold); border-color: rgba(224,188,114,0.55); background: rgba(224,188,114,0.10); }
 .zoom-readout { min-width: 38px; font-size: 11px; color: var(--gold); text-align: right; }
+.activity-toggle { margin-left: 6px; border-style: dashed; }
 .day-timeline { border: 1px solid var(--border); border-radius: 14px; background: rgba(255,255,255,0.035); overflow: hidden; }
 .timeline-scroll { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; cursor: grab; user-select: none; }
 .timeline-scroll.dragging { cursor: grabbing; }
@@ -1035,9 +1053,14 @@ onBeforeUnmount(() => {
 .activity-text { position: relative; z-index: 1; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .now-line { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(127,169,140,0.88); }
 .now-line b { position: absolute; top: 9px; left: 6px; font-size: 10px; color: var(--green); font-weight: 500; white-space: nowrap; }
-.activity-panel { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(127,169,140,.20); display: flex; flex-direction: column; gap: 8px; }
+.activity-panel { margin-top: 10px; padding: 9px 10px; border: 1px dashed rgba(127,169,140,.24); border-radius: 12px; background: rgba(127,169,140,.045); display: flex; flex-direction: column; gap: 8px; }
+.activity-panel.collapsed { padding-bottom: 9px; }
 .activity-panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.activity-count { margin-left: 6px; color: var(--green); font-size: 12px; font-weight: 400; }
 .activity-help { font-size: 12px; line-height: 1.5; }
+.activity-rows { max-height: 240px; overflow: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 8px; scrollbar-width: thin; }
+.activity-rows::-webkit-scrollbar { width: 8px; }
+.activity-rows::-webkit-scrollbar-thumb { background: rgba(127,169,140,.24); border-radius: 999px; }
 .activity-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px; border: 1px dashed rgba(127,169,140,.32); background: rgba(127,169,140,.07); }
 .activity-row.idle_inside_entry { border-color: rgba(241,162,143,.34); background: rgba(241,162,143,.07); }
 .activity-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
