@@ -1,7 +1,7 @@
 {
   "name": "niuma-panel",
   "productName": "牛马联盟",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "打工人时间台账与加班证据记录仪",
   "main": "src/main/index.js",
   "license": "MIT",

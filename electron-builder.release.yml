@@ -24,6 +24,7 @@ asarUnpack:
   - node_modules/better-sqlite3/**
 win:
   icon: build/icon.ico
+  signAndEditExecutable: false
   target:
     - target: nsis
       arch:
