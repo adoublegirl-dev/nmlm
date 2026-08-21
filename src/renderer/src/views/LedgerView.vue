@@ -741,8 +741,15 @@ function formatActivityRange(a) {
   return `${formatTime(a.start, { seconds: true })} – ${formatTime(a.end, { seconds: true })}`
 }
 function focusActivitySuggestion(signature) {
-  const el = document.querySelector(`[data-activity-signature="${CSS.escape(signature)}"]`)
-  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  activityPanelCollapsed.value = false
+  nextTick(() => {
+    const el = document.querySelector(`[data-activity-signature="${CSS.escape(signature)}"]`)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.remove('pulse-focus')
+    window.requestAnimationFrame(() => el.classList.add('pulse-focus'))
+    window.setTimeout(() => el.classList.remove('pulse-focus'), 1600)
+  })
 }
 async function convertActivityToLedger(a) {
   const form = activityForms.value[a.signature] || {}
@@ -1063,6 +1070,12 @@ onBeforeUnmount(() => {
 .activity-rows::-webkit-scrollbar-thumb { background: rgba(127,169,140,.24); border-radius: 999px; }
 .activity-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px; border: 1px dashed rgba(127,169,140,.32); background: rgba(127,169,140,.07); }
 .activity-row.idle_inside_entry { border-color: rgba(241,162,143,.34); background: rgba(241,162,143,.07); }
+.activity-row.pulse-focus { animation: activityPulseFocus 1.35s ease both; }
+@keyframes activityPulseFocus {
+  0% { box-shadow: 0 0 0 0 rgba(224,188,114,.0); transform: translateY(0); }
+  20% { box-shadow: 0 0 0 2px rgba(224,188,114,.55), 0 0 24px rgba(224,188,114,.22); transform: translateY(-1px); }
+  100% { box-shadow: 0 0 0 0 rgba(224,188,114,0); transform: translateY(0); }
+}
 .activity-main { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .activity-kind { font-size: 12px; color: var(--green); border: 1px solid rgba(127,169,140,.32); background: rgba(127,169,140,.10); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
 .activity-row.idle_inside_entry .activity-kind { color: #f1a28f; border-color: rgba(241,162,143,.34); background: rgba(241,162,143,.10); }
