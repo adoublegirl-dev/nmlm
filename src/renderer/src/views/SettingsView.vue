@@ -11,13 +11,20 @@
 
     <div class="settings-layout">
       <aside class="settings-nav card">
-        <a v-for="item in navs" :key="item.id" :href="'#' + item.id" class="settings-nav-item">
+        <button
+          v-for="item in navs"
+          :key="item.id"
+          type="button"
+          class="settings-nav-item"
+          :class="{ active: activeSection === item.id }"
+          @click="activeSection = item.id"
+        >
           <span>{{ item.icon }}</span><b>{{ item.label }}</b>
-        </a>
+        </button>
       </aside>
 
       <main class="settings-main">
-        <section id="basic" class="settings-section card">
+        <section v-if="activeSection === 'basic'" class="settings-section card">
           <div class="section-head">
             <div><p class="eyebrow">Basic</p><h3>基础与本地服务</h3></div>
             <button class="btn" @click="openBrowser">浏览器打开后台</button>
@@ -31,7 +38,7 @@
           </div>
         </section>
 
-        <section id="record" class="settings-section card">
+        <section v-else-if="activeSection === 'record'" class="settings-section card">
           <div class="section-head">
             <div><p class="eyebrow">Recorder</p><h3>记录器、快捷键与标签</h3></div>
           </div>
@@ -68,7 +75,7 @@
           </div>
         </section>
 
-        <section id="activity" class="settings-section card">
+        <section v-else-if="activeSection === 'activity'" class="settings-section card">
           <div class="section-head">
             <div><p class="eyebrow">Privacy & Activity</p><h3>活动轨迹与隐私</h3></div>
           </div>
@@ -94,7 +101,7 @@
           </div>
         </section>
 
-        <section id="evidence" class="settings-section card">
+        <section v-else-if="activeSection === 'evidence'" class="settings-section card">
           <div class="section-head">
             <div><p class="eyebrow">Evidence</p><h3>证据库</h3></div>
             <button class="btn" @click="openScreenshotsDir">打开证据库目录</button>
@@ -108,7 +115,7 @@
           <button class="btn primary" @click="migrateEvidenceDir">迁移证据库位置</button>
         </section>
 
-        <section id="agent" class="settings-section card">
+        <section v-else-if="activeSection === 'agent'" class="settings-section card">
           <div class="section-head">
             <div><p class="eyebrow">Agent</p><h3>MCP 接入</h3></div>
             <button class="btn" @click="loadMcpConfig">刷新配置</button>
@@ -122,7 +129,7 @@
           <div class="muted hint">当前支持待办、台账查询、证据查询；证据导入暂不开放，避免污染证据库。</div>
         </section>
 
-        <section id="model" class="settings-section card">
+        <section v-else-if="activeSection === 'model'" class="settings-section card">
           <div class="section-head"><div><p class="eyebrow">Model</p><h3>模型（预留）</h3></div></div>
           <div class="form-grid">
             <label>provider<select class="input" :value="model.provider" @change="setModel('provider', $event.target.value)"><option value="ollama">ollama</option><option value="openai">openai</option></select></label>
@@ -151,6 +158,7 @@ const navs = [
   { id: 'model', label: '模型', icon: '◇' }
 ]
 
+const activeSection = ref('basic')
 const urls = ref({})
 const token = ref('')
 const userData = ref('')
@@ -287,8 +295,9 @@ onMounted(load)
 .eyebrow { color: var(--green); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 4px; }
 .settings-layout { display: grid; grid-template-columns: 188px minmax(0, 1fr); gap: 16px; align-items: start; }
 .settings-nav { position: sticky; top: 86px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
-.settings-nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 11px; border-radius: 11px; color: var(--text-dim); text-decoration: none; }
+.settings-nav-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 11px; border: 0; border-radius: 11px; color: var(--text-dim); background: transparent; text-align: left; cursor: pointer; font: inherit; }
 .settings-nav-item:hover { background: var(--bg-hover); color: var(--text-main); }
+.settings-nav-item.active { background: rgba(224,188,114,.15); color: var(--gold); box-shadow: inset 0 0 0 1px rgba(224,188,114,.24); }
 .settings-nav-item span { color: var(--gold); }
 .settings-main { display: flex; flex-direction: column; gap: 16px; }
 .settings-section { padding: 18px; border-radius: 18px; }

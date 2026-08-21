@@ -131,7 +131,7 @@
             <template v-else-if="a.kind === 'idle_inside_entry'">
               <button class="btn small primary" @click="applyActivityIdleBreak(a)">按轨迹切分</button>
             </template>
-            <button class="btn small" @click="ignoreActivity(a)">忽略</button>
+            <button class="btn small" @click="ignoreActivity(a)">不再提示</button>
           </div>
         </div>
         </div>
@@ -390,7 +390,7 @@ const activityClips = computed(() => {
       ...a,
       left,
       width,
-      shortLabel: a.isIdle ? 'idle' : (a.processName || '活动'),
+      shortLabel: a.kind === 'entry_context' ? (a.processName || '回溯') : (a.isIdle ? '疑似离开' : (a.processName || '活动')),
       titleText: `${activityKindText(a)} · ${formatActivityRange(a)} · ${a.title || a.processName || ''}`
     }
   })
