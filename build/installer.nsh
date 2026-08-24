@@ -19,6 +19,7 @@
   DetailPrint "Installing Niuma Union core files..."
   DetailPrint "Configuring local data directories and shortcuts..."
   DetailPrint "User ledger and evidence data are stored outside the installation directory."
+  DetailPrint "Shortcut icons are recreated by the installer when possible."
 !macroend
 
 !macro customUnInstall
