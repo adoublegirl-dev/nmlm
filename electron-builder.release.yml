@@ -4,6 +4,7 @@ artifactName: 牛马联盟-Setup-${version}.${ext}
 directories:
   output: ../牛马联盟-发行工作区/output
   buildResources: build
+afterPack: scripts/after-pack-icon.cjs
 files:
   - dist/**
   - src/main/**
