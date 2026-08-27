@@ -1,4 +1,5 @@
 import { api, on } from '../api'
+import capsuleHorseVideo from '../assets/recorder-capsule-horse.mp4'
 import './recorder.css'
 
 const app = document.getElementById('recorder-app')
@@ -6,6 +7,8 @@ app.innerHTML = `
   <div class="recorder-shell">
     <div id="tagMenu" class="tag-menu hidden no-drag"></div>
     <div class="recorder">
+      <video id="capsuleVideo" class="capsule-video no-drag" src="${capsuleHorseVideo}" autoplay muted loop playsinline preload="auto"></video>
+      <div class="capsule-shade" aria-hidden="true"></div>
       <div class="titlebar">
         <div class="title">Niuma Recorder</div>
         <div class="title-actions no-drag">
@@ -98,6 +101,8 @@ function renderLayoutClass() {
   shell.dataset.displayMode = mode
   shell.classList.toggle('mode-capsule', mode === 'capsule')
   shell.classList.toggle('mode-panel', mode !== 'capsule')
+  const video = document.getElementById('capsuleVideo')
+  if (video && mode === 'capsule') video.play().catch(() => {})
 }
 async function saveSelectedTag(id) {
   selectedTagId = id
