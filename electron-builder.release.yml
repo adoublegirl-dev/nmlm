@@ -23,6 +23,9 @@ files:
 asar: true
 asarUnpack:
   - node_modules/better-sqlite3/**
+extraResources:
+  - from: build/icon.ico
+    to: appIcon.ico
 win:
   icon: build/icon.ico
   signAndEditExecutable: false
@@ -34,7 +37,7 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   perMachine: false
-  createDesktopShortcut: always
+  createDesktopShortcut: false
   createStartMenuShortcut: true
   shortcutName: 牛马联盟
   installerIcon: build/icon.ico

@@ -19,7 +19,10 @@
   DetailPrint "Installing Niuma Union core files..."
   DetailPrint "Configuring local data directories and shortcuts..."
   DetailPrint "User ledger and evidence data are stored outside the installation directory."
-  DetailPrint "Shortcut icons are recreated by the installer when possible."
+  DetailPrint "Creating current-user desktop shortcut with stable icon."
+  SetShellVarContext current
+  Delete "$DESKTOP\牛马联盟.lnk"
+  CreateShortCut "$DESKTOP\牛马联盟.lnk" "$INSTDIR\牛马联盟.exe" "" "$INSTDIR\resources\appIcon.ico" 0
 !macroend
 
 !macro customUnInstall
