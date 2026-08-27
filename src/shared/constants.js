@@ -173,9 +173,10 @@ const DEFAULT_SETTINGS = {
     selectedTagId: null,
     position: { x: null, y: null }, // null = 右下角默认
     hiddenToTray: false,
-    displayMode: 'panel', // panel = 设计稿小面板；capsule = 预留胶囊收起骨架
+    displayMode: 'capsule', // panel = 设计稿小面板；capsule = 胶囊收起形态
+    capsuleSkin: 'horse', // horse = 奔马胶囊；classic = 经典信息胶囊
     expandedWidth: 280,
-    expandedHeight: 346,
+    expandedHeight: 390,
     collapsedPanelWidth: 280,
     collapsedPanelHeight: 200,
     collapsedCapsuleWidth: 136,

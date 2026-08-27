@@ -1,4 +1,8 @@
 import { api, on } from '../api'
+import capsuleHorseVideo from '../assets/recorder-capsule-horse.mp4'
+import capsuleHorseStill from '../assets/recorder-capsule-horse-still.png'
+import heroHorseVideo from '../assets/recorder-horse-run-loop.mp4'
+import heroHorseStill from '../assets/recorder-horse-still.png'
 import './recorder.css'
 
 const app = document.getElementById('recorder-app')
@@ -6,6 +10,9 @@ app.innerHTML = `
   <div class="recorder-shell">
     <div id="tagMenu" class="tag-menu hidden no-drag"></div>
     <div class="recorder">
+      <video id="capsuleVideo" class="capsule-video no-drag" src="${capsuleHorseVideo}" muted loop playsinline preload="auto"></video>
+      <img id="capsuleStill" class="capsule-still no-drag" src="${capsuleHorseStill}" alt="" />
+      <div class="capsule-shade" aria-hidden="true"></div>
       <div class="titlebar">
         <div class="title">Niuma Recorder</div>
         <div class="title-actions no-drag">
@@ -17,6 +24,8 @@ app.innerHTML = `
       <section class="hero no-drag" aria-label="记录器状态">
         <div class="hero-bezel"></div>
         <div class="hero-inner">
+          <video id="heroVideo" class="hero-video" src="${heroHorseVideo}" muted loop playsinline preload="auto"></video>
+          <img id="heroStill" class="hero-still" src="${heroHorseStill}" alt="" />
           <div class="idle-copy">
             <span class="dot"></span>
             <span id="idleTagLabel">选择标签后开始记录</span>
@@ -94,10 +103,35 @@ async function loadSettings() {
 
 function renderLayoutClass() {
   const shell = document.querySelector('.recorder-shell')
-  const mode = recorderSettings.displayMode === 'capsule' ? 'capsule' : 'panel'
+  const mode = 'capsule'
+  const skin = 'horse'
   shell.dataset.displayMode = mode
+  shell.dataset.capsuleSkin = skin
   shell.classList.toggle('mode-capsule', mode === 'capsule')
   shell.classList.toggle('mode-panel', mode !== 'capsule')
+  shell.classList.toggle('skin-horse', mode === 'capsule' && skin === 'horse')
+  shell.classList.toggle('skin-classic', mode === 'capsule' && skin === 'classic')
+  updateMotionState()
+}
+function updateMotionState() {
+  const shell = document.querySelector('.recorder-shell')
+  const isHorseCapsule = shell.classList.contains('mode-capsule') && shell.classList.contains('skin-horse')
+  const running = !!current && !current.paused
+  shell.classList.toggle('motion-running', running)
+  shell.classList.toggle('motion-still', !running)
+
+  const capsuleVideo = document.getElementById('capsuleVideo')
+  const heroVideo = document.getElementById('heroVideo')
+  const shouldPlayCapsule = isHorseCapsule && collapsed && running
+  const shouldPlayHero = !collapsed && running
+  if (capsuleVideo) {
+    if (shouldPlayCapsule) capsuleVideo.play().catch(() => {})
+    else capsuleVideo.pause()
+  }
+  if (heroVideo) {
+    if (shouldPlayHero) heroVideo.play().catch(() => {})
+    else heroVideo.pause()
+  }
 }
 async function saveSelectedTag(id) {
   selectedTagId = id
@@ -152,6 +186,7 @@ function setCollapsed(next, syncWindow = true) {
   if (menuOpen && next) return
   collapsed = !!next
   document.querySelector('.recorder-shell').classList.toggle('collapsed', collapsed)
+  updateMotionState()
   if (syncWindow) api('recorder:setCollapsed', { collapsed }).catch(() => {})
   resetIdleTimer()
 }
@@ -213,6 +248,7 @@ function renderStateClass() {
 }
 function render() {
   const timer = document.getElementById('timer')
+  const recordLabel = document.querySelector('.record-label')
   const toggleBtn = document.getElementById('toggleBtn')
   const pauseBtn = document.getElementById('pauseBtn')
   const stopBtn = document.getElementById('stopBtn')
@@ -221,11 +257,13 @@ function render() {
   renderTagButton()
   renderLayoutClass()
   renderStateClass()
+  updateMotionState()
   if (activeMessage) document.getElementById('messageBadge').textContent = activeMessage.text
 
   if (current) {
     const end = current.paused ? current.paused_at : Date.now()
     timer.textContent = hmShort((end - current.start_time) / 1000)
+    recordLabel.textContent = current.paused ? '暂停中' : '记录中'
     const pausedDelta = current.paused ? hms((Date.now() - current.paused_at) / 1000) : ''
     document.getElementById('toggleLabel').textContent = current.paused ? '继续记录' : '暂停记录'
     toggleBtn.title = current.paused ? '继续' : '暂停'
@@ -235,6 +273,7 @@ function render() {
     hint.textContent = current.paused ? `暂停中：${pausedDelta}` : '记录中：悬停可展开，空闲后回到小面板'
   } else {
     timer.textContent = '00:00'
+    recordLabel.textContent = '准备记录'
     document.getElementById('toggleLabel').textContent = '开始记录'
     toggleBtn.title = '开始记录'
     pauseBtn.textContent = '暂停'
