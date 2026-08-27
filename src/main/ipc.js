@@ -152,6 +152,9 @@ function registerAll() {
       if (value) windows.showRecorder()
       else windows.hideRecorder(true)
     }
+    if (String(a.key || '').startsWith('recorder.') && a.key !== 'recorder.enabled' && a.key !== 'recorder.hiddenToTray') {
+      windows.refreshRecorderLayout()
+    }
     return { ok: true, value }
   })
 

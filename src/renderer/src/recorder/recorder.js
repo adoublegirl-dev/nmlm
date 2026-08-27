@@ -21,12 +21,15 @@ app.innerHTML = `
             <span class="dot"></span>
             <span id="idleTagLabel">选择标签后开始记录</span>
           </div>
-          <div class="record-copy">
-            <div class="record-label">已记录</div>
-            <div id="timer" class="timer num">00:00:00</div>
-            <div id="recordTagLabel" class="record-tag">未选择标签</div>
-          </div>
           <div class="visual-line" aria-hidden="true"><span></span><i></i><b></b></div>
+        </div>
+      </section>
+
+      <section class="status-strip no-drag">
+        <div class="record-copy">
+          <div class="record-label">已记录</div>
+          <div id="timer" class="timer num">00:00:00</div>
+          <div id="recordTagLabel" class="record-tag">未选择标签</div>
         </div>
       </section>
 
@@ -52,6 +55,7 @@ app.innerHTML = `
 
 let tags = []
 let current = null
+let recorderSettings = {}
 let selectedTagId = null
 let paused = false
 let menuOpen = false
@@ -83,7 +87,17 @@ function escapeHtml(s) {
 
 async function loadSettings() {
   const r = await api('settings:getAll')
+  recorderSettings = r.settings?.recorder || {}
   selectedTagId = r.settings?.recorder?.selectedTagId || r.settings?.mini?.selectedTagId || null
+  renderLayoutClass()
+}
+
+function renderLayoutClass() {
+  const shell = document.querySelector('.recorder-shell')
+  const mode = recorderSettings.displayMode === 'capsule' ? 'capsule' : 'panel'
+  shell.dataset.displayMode = mode
+  shell.classList.toggle('mode-capsule', mode === 'capsule')
+  shell.classList.toggle('mode-panel', mode !== 'capsule')
 }
 async function saveSelectedTag(id) {
   selectedTagId = id
@@ -205,6 +219,7 @@ function render() {
   const hint = document.getElementById('taskHint')
 
   renderTagButton()
+  renderLayoutClass()
   renderStateClass()
   if (activeMessage) document.getElementById('messageBadge').textContent = activeMessage.text
 
@@ -274,6 +289,10 @@ document.addEventListener('click', (e) => {
 })
 
 on('ledger:state-changed', () => refresh())
+on('settings:changed', (payload) => {
+  if (!String(payload?.key || '').startsWith('recorder')) return
+  loadSettings().then(render).catch(() => {})
+})
 on('recorder:message', showMessage)
 on('recorder:expand', () => setCollapsed(false, false))
 

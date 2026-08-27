@@ -47,6 +47,25 @@
             <label class="switch"><input type="checkbox" :checked="recorder.enabled" @change="setRecorder('enabled', $event.target.checked)" /><i></i></label>
           </div>
           <div class="sub-card">
+            <div class="sub-title">记录器显示</div>
+            <div class="form-grid">
+              <label>收起模式
+                <select class="input" :value="recorder.displayMode || 'panel'" @change="setRecorder('displayMode', $event.target.value)">
+                  <option value="panel">小面板</option>
+                  <option value="capsule">胶囊（预留）</option>
+                </select>
+              </label>
+              <label>展开宽度<input class="input" type="number" min="240" max="420" :value="recorder.expandedWidth || 280" @change="setRecorderNumber('expandedWidth', $event.target.value, 280)" /></label>
+              <label>展开高度<input class="input" type="number" min="260" max="520" :value="recorder.expandedHeight || 346" @change="setRecorderNumber('expandedHeight', $event.target.value, 346)" /></label>
+              <label>小面板宽度<input class="input" type="number" min="240" max="420" :value="recorder.collapsedPanelWidth || 280" @change="setRecorderNumber('collapsedPanelWidth', $event.target.value, 280)" /></label>
+              <label>小面板高度<input class="input" type="number" min="140" max="360" :value="recorder.collapsedPanelHeight || 200" @change="setRecorderNumber('collapsedPanelHeight', $event.target.value, 200)" /></label>
+              <label>胶囊宽度<input class="input" type="number" min="96" max="220" :value="recorder.collapsedCapsuleWidth || 136" @change="setRecorderNumber('collapsedCapsuleWidth', $event.target.value, 136)" /></label>
+              <label>胶囊高度<input class="input" type="number" min="40" max="80" :value="recorder.collapsedCapsuleHeight || 54" @change="setRecorderNumber('collapsedCapsuleHeight', $event.target.value, 54)" /></label>
+            </div>
+            <div class="muted hint">展开态默认按设计稿；收起态可在小面板和胶囊骨架之间切换。胶囊 UI 等后续设计稿替换。</div>
+            <button class="btn mini" @click="resetRecorderLayout">恢复默认尺寸</button>
+          </div>
+          <div class="sub-card">
             <div class="sub-title">快捷键</div>
             <div v-for="(acc, name) in shortcuts" :key="name" class="compact-row">
               <span>{{ labelOf(name) }}</span><code>{{ acc || '未启用' }}</code>
@@ -210,6 +229,22 @@ async function setPrivacy(key, val) { await api('settings:set', { key: `privacy.
 async function setPrivacyList(key, val) { await setPrivacy(key, parseList(val)) }
 async function setModel(key, val) { await api('settings:set', { key: `model.${key}`, value: val }); model.value[key] = val }
 async function setRecorder(key, val) { await api('settings:set', { key: `recorder.${key}`, value: val }); recorder.value[key] = val }
+async function setRecorderNumber(key, val, fallback) {
+  const n = Math.round(Number(val))
+  await setRecorder(key, Number.isFinite(n) ? n : fallback)
+}
+async function resetRecorderLayout() {
+  const defaults = {
+    displayMode: 'panel',
+    expandedWidth: 280,
+    expandedHeight: 346,
+    collapsedPanelWidth: 280,
+    collapsedPanelHeight: 200,
+    collapsedCapsuleWidth: 136,
+    collapsedCapsuleHeight: 54
+  }
+  for (const [key, value] of Object.entries(defaults)) await setRecorder(key, value)
+}
 
 async function resetToken() {
   const ok = await showConfirm('重置后旧的局域网/Agent 访问令牌会失效，是否继续？', { title: '重置访问令牌', confirmText: '重置' })

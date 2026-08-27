@@ -172,7 +172,14 @@ const DEFAULT_SETTINGS = {
     enabled: true, // 启动时是否自动显示桌面记录器
     selectedTagId: null,
     position: { x: null, y: null }, // null = 右下角默认
-    hiddenToTray: false
+    hiddenToTray: false,
+    displayMode: 'panel', // panel = 设计稿小面板；capsule = 预留胶囊收起骨架
+    expandedWidth: 280,
+    expandedHeight: 346,
+    collapsedPanelWidth: 280,
+    collapsedPanelHeight: 200,
+    collapsedCapsuleWidth: 136,
+    collapsedCapsuleHeight: 54
   },
   mini: {
     enabled: false, // legacy，仅用于兼容旧配置

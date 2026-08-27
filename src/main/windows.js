@@ -17,6 +17,26 @@ const RECORDER_HEIGHT = 346
 const RECORDER_COLLAPSED_WIDTH = 280
 const RECORDER_MESSAGE_WIDTH = RECORDER_COLLAPSED_WIDTH
 const RECORDER_COLLAPSED_HEIGHT = 200
+
+function clampNumber(value, min, max, fallback) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return fallback
+  return Math.round(Math.min(max, Math.max(min, n)))
+}
+
+function recorderLayout() {
+  const recorder = settings.get('recorder') || {}
+  const expandedWidth = clampNumber(recorder.expandedWidth, 240, 420, RECORDER_WIDTH)
+  const expandedHeight = clampNumber(recorder.expandedHeight, 260, 520, RECORDER_HEIGHT)
+  const displayMode = recorder.displayMode === 'capsule' ? 'capsule' : 'panel'
+  const panelWidth = clampNumber(recorder.collapsedPanelWidth, 240, 420, RECORDER_COLLAPSED_WIDTH)
+  const panelHeight = clampNumber(recorder.collapsedPanelHeight, 140, 360, RECORDER_COLLAPSED_HEIGHT)
+  const capsuleWidth = clampNumber(recorder.collapsedCapsuleWidth, 96, 220, 136)
+  const capsuleHeight = clampNumber(recorder.collapsedCapsuleHeight, 40, 80, 54)
+  const collapsedWidth = displayMode === 'capsule' ? capsuleWidth : panelWidth
+  const collapsedHeight = displayMode === 'capsule' ? capsuleHeight : panelHeight
+  return { expandedWidth, expandedHeight, displayMode, panelWidth, panelHeight, capsuleWidth, capsuleHeight, collapsedWidth, collapsedHeight }
+}
 const DIST_URL = () => `http://127.0.0.1:${require('./services/settings').get('server.port')}`
 const APP_ICON = path.join(__dirname, 'assets/icon.ico')
 
@@ -27,8 +47,8 @@ function loadRenderer(win, file) {
 function defaultRecorderPos() {
   const { workArea } = screen.getPrimaryDisplay()
   return {
-    x: Math.round(workArea.x + workArea.width - RECORDER_WIDTH - 24),
-    y: Math.round(workArea.y + workArea.height - RECORDER_HEIGHT - 72)
+    x: Math.round(workArea.x + workArea.width - recorderLayout().expandedWidth - 24),
+    y: Math.round(workArea.y + workArea.height - recorderLayout().expandedHeight - 72)
   }
 }
 
@@ -51,14 +71,15 @@ function createRecorder() {
   if (recorderWin && !recorderWin.isDestroyed()) return recorderWin
   const saved = settings.get('recorder.position') || settings.get('mini.position')
   const rawPos = saved && saved.x != null ? saved : defaultRecorderPos()
-  const pos = clampRecorderPos(rawPos, RECORDER_WIDTH, RECORDER_HEIGHT)
+  const layout = recorderLayout()
+  const pos = clampRecorderPos(rawPos, layout.expandedWidth, layout.expandedHeight)
   recorderWin = new BrowserWindow({
-    width: RECORDER_WIDTH,
-    height: RECORDER_HEIGHT,
-    minWidth: RECORDER_COLLAPSED_WIDTH,
-    maxWidth: RECORDER_WIDTH,
-    minHeight: RECORDER_COLLAPSED_HEIGHT,
-    maxHeight: RECORDER_HEIGHT,
+    width: layout.expandedWidth,
+    height: layout.expandedHeight,
+    minWidth: 96,
+    maxWidth: Math.max(layout.expandedWidth, layout.collapsedWidth),
+    minHeight: 40,
+    maxHeight: Math.max(layout.expandedHeight, layout.collapsedHeight),
     x: pos.x,
     y: pos.y,
     frame: false,
@@ -89,7 +110,7 @@ function createRecorder() {
     }, 250)
   })
   // 尺寸由完整态/收缩态控制，不暴露任意 resize。启动时总是完整态，避免上次胶囊坐标/裁剪残留影响可见区域。
-  applyRecorderShape(false, RECORDER_WIDTH, RECORDER_HEIGHT)
+  applyRecorderShape(false, layout.expandedWidth, layout.expandedHeight)
   loadRenderer(recorderWin, 'recorder.html')
   recorderWin.on('closed', () => { recorderWin = null })
   return recorderWin
@@ -143,8 +164,8 @@ function roundedCapsuleShape(width, height) {
 function applyRecorderShape(collapsed, width, height) {
   if (!recorderWin || typeof recorderWin.setShape !== 'function') return
   try {
-    // Figma 版记录器完整态/收起态都是圆角面板，依靠透明窗口 + CSS 圆角呈现；不再裁成胶囊，避免 280×200 收起态被裁切。
-    recorderWin.setShape([])
+    const layout = recorderLayout()
+    recorderWin.setShape(collapsed && layout.displayMode === 'capsule' ? roundedCapsuleShape(width, height) : [])
   } catch (_) {
     // setShape 在部分 Electron/Windows 组合上可能不可用，失败时退回透明窗口。
   }
@@ -156,8 +177,9 @@ function setRecorderCollapsed(collapsed) {
   const b = recorderWin.getBounds()
   const right = b.x + b.width
   const bottom = b.y + b.height
-  const width = collapsed ? RECORDER_COLLAPSED_WIDTH : RECORDER_WIDTH
-  const height = collapsed ? RECORDER_COLLAPSED_HEIGHT : RECORDER_HEIGHT
+  const layout = recorderLayout()
+  const width = collapsed ? layout.collapsedWidth : layout.expandedWidth
+  const height = collapsed ? layout.collapsedHeight : layout.expandedHeight
   recorderWin.setBounds({ x: right - width, y: bottom - height, width, height })
   applyRecorderShape(collapsed, width, height)
   if (!collapsed) recorderWin.webContents.send(EVENTS.RECORDER_EXPAND, { collapsed: false })
@@ -169,11 +191,17 @@ function setRecorderMessageMode(active) {
   const b = recorderWin.getBounds()
   const right = b.x + b.width
   const bottom = b.y + b.height
-  const width = active ? RECORDER_MESSAGE_WIDTH : RECORDER_COLLAPSED_WIDTH
-  const height = RECORDER_COLLAPSED_HEIGHT
+  const layout = recorderLayout()
+  const width = layout.collapsedWidth
+  const height = layout.collapsedHeight
   recorderWin.setBounds({ x: right - width, y: bottom - height, width, height })
   applyRecorderShape(true, width, height)
   return { ok: true, active: !!active, width, height }
+}
+
+function refreshRecorderLayout() {
+  if (!recorderWin || recorderWin.isDestroyed()) return { ok: false, error: '记录器未创建' }
+  return setRecorderCollapsed(recorderCollapsed)
 }
 
 function showRecorderMessage(payload = {}) {
@@ -284,6 +312,7 @@ module.exports = {
   setRecorderMenuOpen,
   setRecorderCollapsed,
   setRecorderMessageMode,
+  refreshRecorderLayout,
   showRecorderMessage,
   getRecorderMessage,
   // 兼容旧名字，避免外围调用崩
