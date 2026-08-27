@@ -12,11 +12,11 @@ let recorderMessageSeq = 0
 let latestRecorderMessage = null
 let recorderMessageTimer = null
 
-const RECORDER_WIDTH = 380
-const RECORDER_HEIGHT = 260
-const RECORDER_COLLAPSED_WIDTH = 92
+const RECORDER_WIDTH = 280
+const RECORDER_HEIGHT = 346
+const RECORDER_COLLAPSED_WIDTH = 280
 const RECORDER_MESSAGE_WIDTH = RECORDER_COLLAPSED_WIDTH
-const RECORDER_COLLAPSED_HEIGHT = 54
+const RECORDER_COLLAPSED_HEIGHT = 200
 const DIST_URL = () => `http://127.0.0.1:${require('./services/settings').get('server.port')}`
 const APP_ICON = path.join(__dirname, 'assets/icon.ico')
 
@@ -143,7 +143,8 @@ function roundedCapsuleShape(width, height) {
 function applyRecorderShape(collapsed, width, height) {
   if (!recorderWin || typeof recorderWin.setShape !== 'function') return
   try {
-    recorderWin.setShape(collapsed ? roundedCapsuleShape(width, height) : [])
+    // Figma 版记录器完整态/收起态都是圆角面板，依靠透明窗口 + CSS 圆角呈现；不再裁成胶囊，避免 280×200 收起态被裁切。
+    recorderWin.setShape([])
   } catch (_) {
     // setShape 在部分 Electron/Windows 组合上可能不可用，失败时退回透明窗口。
   }
