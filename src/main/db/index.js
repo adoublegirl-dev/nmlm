@@ -182,11 +182,27 @@ const pausePointsRepo = {
 
 // ---------- 待办仓储 ----------
 const todosRepo = {
-  create({ title, detail = null, status = 'todo', priority = 'medium', dueAt = null, source = 'desktop' }) {
+  create({
+    title,
+    detail = null,
+    status = 'todo',
+    priority = 'medium',
+    dueAt = null,
+    source = 'desktop',
+    reminderEnabled = 0,
+    phaseStartAt = null,
+    phaseEndAt = null,
+    remindWindowStart = '09:00',
+    remindWindowEnd = '18:00',
+    remindIntervalMin = 120
+  }) {
     const now = Date.now()
     const info = getDb()
-      .prepare('INSERT INTO todos (title, detail, status, priority, due_at, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(title, detail, status, priority, dueAt, source, now, now)
+      .prepare(`INSERT INTO todos (
+        title, detail, status, priority, due_at, source, created_at, updated_at,
+        reminder_enabled, phase_start_at, phase_end_at, remind_window_start, remind_window_end, remind_interval_min
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`) 
+      .run(title, detail, status, priority, dueAt, source, now, now, reminderEnabled ? 1 : 0, phaseStartAt, phaseEndAt, remindWindowStart, remindWindowEnd, remindIntervalMin)
     return this.get(info.lastInsertRowid)
   },
   get(id) {
@@ -195,22 +211,31 @@ const todosRepo = {
   list({ status = null, includeDone = false, limit = 100, dueOnly = false } = {}) {
     const clauses = []
     const vals = []
+    const now = Date.now()
     if (status) { clauses.push('status = ?'); vals.push(status) }
-    if (!includeDone && !status) clauses.push("status != 'done'")
-    if (dueOnly) { clauses.push('due_at IS NOT NULL AND due_at <= ?'); vals.push(Date.now()) }
+    if (!includeDone && !status && !dueOnly) clauses.push("status != 'done'")
+    if (dueOnly) {
+      clauses.push("(due_at IS NOT NULL AND due_at <= ? OR phase_end_at IS NOT NULL AND phase_end_at <= ?)")
+      vals.push(now, now)
+    }
     vals.push(limit)
     return getDb()
-      .prepare(`SELECT * FROM todos ${clauses.length ? 'WHERE ' + clauses.join(' AND ') : ''} ORDER BY COALESCE(due_at, 9999999999999), updated_at DESC LIMIT ?`)
+      .prepare(`SELECT * FROM todos ${clauses.length ? 'WHERE ' + clauses.join(' AND ') : ''} ORDER BY COALESCE(due_at, phase_end_at, 9999999999999), updated_at DESC LIMIT ?`)
       .all(...vals)
   },
   update(id, patch) {
-    const map = { title: 'title', detail: 'detail', status: 'status', priority: 'priority', dueAt: 'due_at', source: 'source', remindedAt: 'reminded_at', snoozeUntil: 'snooze_until' }
+    const map = {
+      title: 'title', detail: 'detail', status: 'status', priority: 'priority', dueAt: 'due_at', source: 'source',
+      remindedAt: 'reminded_at', snoozeUntil: 'snooze_until', reminderEnabled: 'reminder_enabled', phaseStartAt: 'phase_start_at',
+      phaseEndAt: 'phase_end_at', remindWindowStart: 'remind_window_start', remindWindowEnd: 'remind_window_end',
+      remindIntervalMin: 'remind_interval_min', lastPhaseRemindedAt: 'last_phase_reminded_at', phaseCompletedAt: 'phase_completed_at'
+    }
     const fields = []
     const vals = []
     for (const [k, col] of Object.entries(map)) {
       if (patch[k] !== undefined) { fields.push(`${col} = ?`); vals.push(patch[k]) }
     }
-    if (patch.status === 'done') { fields.push('closed_at = ?'); vals.push(Date.now()) }
+    if (patch.status === 'done') { fields.push('closed_at = ?'); vals.push(patch.closedAt || Date.now()) }
     if (patch.status && patch.status !== 'done') { fields.push('closed_at = ?'); vals.push(null) }
     fields.push('updated_at = ?'); vals.push(Date.now())
     vals.push(id)
@@ -221,10 +246,36 @@ const todosRepo = {
     getDb().prepare('DELETE FROM todos WHERE id = ?').run(id)
     return { ok: true }
   },
+  removeMany(ids = []) {
+    const tx = getDb().transaction((list) => {
+      const stmt = getDb().prepare('DELETE FROM todos WHERE id = ?')
+      for (const id of list) stmt.run(id)
+    })
+    tx(ids)
+    return { ok: true, count: ids.length }
+  },
   dueForReminder(now = Date.now()) {
-    return getDb()
+    const rows = getDb()
       .prepare("SELECT * FROM todos WHERE status != 'done' AND due_at IS NOT NULL AND due_at <= ? AND (snooze_until IS NULL OR snooze_until <= ?) AND (reminded_at IS NULL OR reminded_at < due_at) ORDER BY due_at LIMIT 20")
       .all(now, now)
+    return rows
+  },
+  activePhaseReminders(now = Date.now()) {
+    return getDb()
+      .prepare(`SELECT * FROM todos
+        WHERE status != 'done'
+          AND reminder_enabled = 1
+          AND phase_start_at IS NOT NULL AND phase_end_at IS NOT NULL
+          AND phase_start_at <= ? AND phase_end_at >= ?
+          AND (snooze_until IS NULL OR snooze_until <= ?)
+        ORDER BY COALESCE(last_phase_reminded_at, 0), priority DESC
+        LIMIT 50`)
+      .all(now, now, now)
+  },
+  expiredPhases(now = Date.now()) {
+    return getDb()
+      .prepare("SELECT * FROM todos WHERE status != 'done' AND phase_end_at IS NOT NULL AND phase_end_at < ? ORDER BY phase_end_at LIMIT 50")
+      .all(now)
   }
 }
 

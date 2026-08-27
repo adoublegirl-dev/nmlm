@@ -221,6 +221,22 @@ const MIGRATIONS = [
       );
       CREATE INDEX IF NOT EXISTS idx_activity_ignored_range ON activity_ignored_suggestions(start_time, end_time);
     `
+  },
+  {
+    version: 9,
+    name: 'todo-phase-reminders',
+    sql: `
+      ALTER TABLE todos ADD COLUMN reminder_enabled INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE todos ADD COLUMN phase_start_at INTEGER;
+      ALTER TABLE todos ADD COLUMN phase_end_at INTEGER;
+      ALTER TABLE todos ADD COLUMN remind_window_start TEXT NOT NULL DEFAULT '09:00';
+      ALTER TABLE todos ADD COLUMN remind_window_end TEXT NOT NULL DEFAULT '18:00';
+      ALTER TABLE todos ADD COLUMN remind_interval_min INTEGER NOT NULL DEFAULT 120;
+      ALTER TABLE todos ADD COLUMN last_phase_reminded_at INTEGER;
+      ALTER TABLE todos ADD COLUMN phase_completed_at INTEGER;
+      CREATE INDEX IF NOT EXISTS idx_todos_phase_range ON todos(phase_start_at, phase_end_at);
+      CREATE INDEX IF NOT EXISTS idx_todos_phase_completed ON todos(phase_completed_at);
+    `
   }
 ]
 

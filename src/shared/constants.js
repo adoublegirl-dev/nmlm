@@ -63,6 +63,9 @@ const IPC = {
   TODOS_CLOSE: 'todos:close',
   TODOS_REOPEN: 'todos:reopen',
   TODOS_DELETE: 'todos:delete',
+  TODOS_BATCH_CLOSE: 'todos:batchClose',
+  TODOS_BATCH_REOPEN: 'todos:batchReopen',
+  TODOS_BATCH_DELETE: 'todos:batchDelete',
   TODOS_DUE: 'todos:due',
   TODOS_SNOOZE: 'todos:snooze',
   // settings

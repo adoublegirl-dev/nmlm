@@ -72,7 +72,25 @@ const todoShape = {
   detail: { type: 'string' },
   status: { type: 'string', enum: ['todo', 'doing', 'done'] },
   priority: { type: 'string', enum: ['low', 'medium', 'high'] },
-  dueAt: { type: 'string', description: '截止时间 ISO/本地时间字符串；传空字符串可清空' }
+  dueAt: { type: 'string', description: '截止时间 ISO/本地时间字符串；传空字符串可清空' },
+  reminderEnabled: { type: 'boolean', description: '是否启用阶段提醒' },
+  phaseStartAt: { type: 'string', description: '阶段开始时间 ISO/本地时间字符串；传空字符串可清空' },
+  phaseEndAt: { type: 'string', description: '阶段结束时间 ISO/本地时间字符串；传空字符串可清空' },
+  remindWindowStart: { type: 'string', description: '每日提醒开始时间，HH:mm，例如 09:00' },
+  remindWindowEnd: { type: 'string', description: '每日提醒结束时间，HH:mm，例如 18:00' },
+  remindIntervalMin: { type: 'number', description: '阶段提醒频率，单位分钟' }
+}
+
+const todoIdsShape = {
+  ids: { type: 'array', items: { type: 'number' }, description: '待办 id 列表' }
+}
+
+function todoPayloadFromArgs(a = {}) {
+  const payload = { ...a }
+  if (payload.dueAt !== undefined) payload.dueAt = parseDueAt(payload.dueAt)
+  if (payload.phaseStartAt !== undefined) payload.phaseStartAt = parseDueAt(payload.phaseStartAt)
+  if (payload.phaseEndAt !== undefined) payload.phaseEndAt = parseDueAt(payload.phaseEndAt)
+  return payload
 }
 
 const server = new Server({ name: 'nmlm', version: '0.2.1' }, { capabilities: { tools: {} } })
@@ -88,7 +106,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           title: { type: 'string', description: '待办标题' },
           detail: { type: 'string', description: '详细描述' },
           priority: { type: 'string', enum: ['low', 'medium', 'high'], default: 'medium' },
-          dueAt: todoShape.dueAt
+          dueAt: todoShape.dueAt,
+          reminderEnabled: todoShape.reminderEnabled,
+          phaseStartAt: todoShape.phaseStartAt,
+          phaseEndAt: todoShape.phaseEndAt,
+          remindWindowStart: todoShape.remindWindowStart,
+          remindWindowEnd: todoShape.remindWindowEnd,
+          remindIntervalMin: todoShape.remindIntervalMin
         },
         required: ['title']
       }
@@ -136,6 +160,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       inputSchema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] }
     },
     {
+      name: 'nmlm_todo_batch_close',
+      description: '批量完成牛马联盟待办。',
+      inputSchema: { type: 'object', properties: todoIdsShape, required: ['ids'] }
+    },
+    {
+      name: 'nmlm_todo_batch_reopen',
+      description: '批量重开牛马联盟待办。',
+      inputSchema: { type: 'object', properties: { ...todoIdsShape, status: { type: 'string', enum: ['todo', 'doing'], default: 'todo' } }, required: ['ids'] }
+    },
+    {
+      name: 'nmlm_todo_batch_delete',
+      description: '批量物理删除牛马联盟待办。调用前应让用户确认，删除后不可恢复。',
+      inputSchema: { type: 'object', properties: todoIdsShape, required: ['ids'] }
+    },
+    {
       name: 'nmlm_task_current',
       description: '查看当前正在记录的任务片段。',
       inputSchema: { type: 'object', properties: {} }
@@ -177,18 +216,17 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const name = req.params.name
   const a = req.params.arguments || {}
   if (name === 'nmlm_todo_add') {
-    return text(await call('todos:create', { title: a.title, detail: a.detail || null, priority: a.priority || 'medium', dueAt: parseDueAt(a.dueAt), source: 'agent' }))
+    return text(await call('todos:create', { ...todoPayloadFromArgs(a), detail: a.detail || null, priority: a.priority || 'medium', source: 'agent' }))
   }
   if (name === 'nmlm_todo_list') return text(await call('todos:list', a))
   if (name === 'nmlm_todo_due') return text(await call('todos:due', { now: a.now }))
-  if (name === 'nmlm_todo_update') {
-    const payload = { ...a }
-    if (payload.dueAt !== undefined) payload.dueAt = parseDueAt(payload.dueAt)
-    return text(await call('todos:update', payload))
-  }
+  if (name === 'nmlm_todo_update') return text(await call('todos:update', todoPayloadFromArgs(a)))
   if (name === 'nmlm_todo_close') return text(await call('todos:close', { id: a.id }))
   if (name === 'nmlm_todo_reopen') return text(await call('todos:reopen', { id: a.id, status: a.status || 'todo' }))
   if (name === 'nmlm_todo_delete') return text(await call('todos:delete', { id: a.id }))
+  if (name === 'nmlm_todo_batch_close') return text(await call('todos:batchClose', { ids: a.ids || [] }))
+  if (name === 'nmlm_todo_batch_reopen') return text(await call('todos:batchReopen', { ids: a.ids || [], status: a.status || 'todo' }))
+  if (name === 'nmlm_todo_batch_delete') return text(await call('todos:batchDelete', { ids: a.ids || [] }))
   if (name === 'nmlm_task_current') return text(await call('ledger:current'))
   if (name === 'nmlm_ledger_list') {
     const range = resolveRange(a)

@@ -132,6 +132,9 @@ function registerAll() {
   registerHandler(IPC.TODOS_CLOSE, (a) => todos.close(a))
   registerHandler(IPC.TODOS_REOPEN, (a) => todos.reopen(a))
   registerHandler(IPC.TODOS_DELETE, (a) => todos.remove(a))
+  registerHandler(IPC.TODOS_BATCH_CLOSE, (a) => todos.batchClose(a))
+  registerHandler(IPC.TODOS_BATCH_REOPEN, (a) => todos.batchReopen(a))
+  registerHandler(IPC.TODOS_BATCH_DELETE, (a) => todos.batchDelete(a))
   registerHandler(IPC.TODOS_DUE, (a) => todos.due(a && a.now))
   registerHandler(IPC.TODOS_SNOOZE, (a) => todos.snooze(a))
 
