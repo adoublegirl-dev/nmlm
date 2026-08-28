@@ -51,18 +51,99 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
 .pause-elapsed { grid-area: pause; display: none; align-self: end; padding: 2px 6px; border-radius: 999px; background: rgba(123,63,32,.1); color: #7b3f20; font-size: 10px; line-height: 14px; white-space: nowrap; }
 .record-tag { grid-area: tag; max-width: 96px; padding: 2px 6px; border-radius: 6px; background: rgba(146, 80, 23, .1); font-size: 11px; color: var(--brown-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .quick-row { width: calc(100vw - 20px); height: 56px; margin: 0 10px 8px; display: flex; gap: 10px; }
-.tag-card, .start-card { position: relative; height: 56px; border: 0; border-radius: 20px; background: #e5dab8; cursor: pointer; overflow: hidden; transition: transform .16s ease, filter .16s ease; }
-.tag-card::before, .start-card::before { content: ''; position: absolute; inset: 2px; border-radius: 18px; background: var(--brown-dark); }
-.tag-card::after, .start-card::after { content: ''; position: absolute; inset: 3px; border-radius: 17px; background: linear-gradient(180deg, #f3e3bc 0%, #d4b27b 45%, #b9894f 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.35); }
+.tag-card, .start-card { position: relative; height: 56px; border: 0; border-radius: 20px; background: #e5dab8; cursor: pointer; overflow: hidden; transition: transform .16s ease, filter .16s ease, background .2s ease, box-shadow .2s ease; isolation: isolate; }
+.tag-card::before, .start-card::before { content: ''; position: absolute; z-index: 1; inset: 2px; border-radius: 18px; background: var(--brown-dark); transition: background .2s ease, box-shadow .2s ease; }
+.tag-card::after, .start-card::after { content: ''; position: absolute; z-index: 2; inset: 3px; border-radius: 17px; background: linear-gradient(180deg, #f3e3bc 0%, #d4b27b 45%, #b9894f 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.35); transition: background .2s ease, box-shadow .2s ease; }
 .tag-card:hover, .start-card:hover { transform: translateY(-1px); filter: brightness(1.03); }
-.tag-card:active, .start-card:active { transform: translateY(0); }
+.tag-card:active, .start-card:active, .tag-card.hoof-press, .start-card.hoof-press { transform: translateY(2px) scale(.985); filter: brightness(.98) saturate(1.04); }
+.is-paused #tagButton {
+  background: #e5dab8;
+  box-shadow: none;
+}
+.is-paused #tagButton::before {
+  background: var(--brown-dark);
+  box-shadow: none;
+}
+.is-paused #tagButton::after {
+  background: linear-gradient(180deg, #f3e3bc 0%, #d4b27b 45%, #b9894f 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.35);
+}
+.pause-breath-ring { position: absolute; z-index: 0; inset: 0; border-radius: 20px; pointer-events: none; opacity: 0; will-change: opacity, transform; background: var(--tag-color, #ba945d); transform: scale(1); }
+.is-paused #tagButton .pause-breath-ring { animation: pauseBorderBreath 2.8s ease-in-out infinite; }
+#tagButton.resume-pulse .pause-breath-ring { animation: resumeBorderPulse .58s cubic-bezier(.16,.8,.2,1) both; }
+.hoof-dust { position: absolute; z-index: 5; left: 50%; bottom: 8px; width: 10px; height: 6px; pointer-events: none; transform: translateX(-50%); border-radius: 999px; background: rgba(238,214,158,.34); box-shadow: -18px 2px 0 -2px rgba(205,156,83,.30), -9px -2px 0 -3px rgba(255,236,183,.42), 11px 1px 0 -3px rgba(205,156,83,.32), 21px -1px 0 -4px rgba(255,236,183,.38); animation: hoofDustBurst .48s cubic-bezier(.2,.72,.18,1) both; }
+@keyframes hoofDustBurst {
+  0% { opacity: 0; transform: translateX(-50%) translateY(5px) scale(.35); filter: blur(0); }
+  18% { opacity: .82; }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-7px) scale(3.3, 1.45); filter: blur(2px); }
+}
+@keyframes pauseBorderBreath {
+  0%, 100% { opacity: .38; transform: scale(1); }
+  50% { opacity: .95; transform: scale(1); }
+}
+@keyframes resumeBorderPulse {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.05); }
+}
+.is-paused #tagButton .tag-mark {
+  animation: pauseDiamondBreath 2.8s ease-in-out infinite;
+}
+#tagButton.resume-pulse .tag-mark {
+  animation: resumeDiamondPulse .58s cubic-bezier(.16,.8,.2,1) both;
+}
+@keyframes pauseDiamondBreath {
+  0%, 100% { opacity: .78; text-shadow: 0 1px 0 rgba(255,255,255,.35), 0 0 4px color-mix(in srgb, var(--tag-color, #ba945d) 20%, transparent); }
+  50% { opacity: 1; text-shadow: 0 1px 0 rgba(255,255,255,.35), 0 0 12px color-mix(in srgb, var(--tag-color, #ba945d) 68%, transparent); }
+}
+@keyframes resumeDiamondPulse {
+  0% { transform: scale(1); text-shadow: 0 0 14px color-mix(in srgb, var(--tag-color, #ba945d) 75%, transparent); }
+  45% { transform: scale(1.16); text-shadow: 0 0 18px color-mix(in srgb, var(--tag-color, #ba945d) 86%, transparent); }
+  100% { transform: scale(1); text-shadow: 0 1px 0 rgba(255,255,255,.35), 0 0 8px color-mix(in srgb, var(--tag-color, #ba945d) 30%, transparent); }
+}
 .tag-card { width: 56px; flex: 0 0 56px; padding: 2px; display: grid; place-items: center; }
-.tag-mark { position: relative; z-index: 1; color: var(--tag-color, #ba945d); font-size: 16px; text-shadow: 0 1px 0 rgba(255,255,255,.35), 0 0 10px color-mix(in srgb, var(--tag-color, #ba945d) 45%, transparent); }
+.tag-mark { position: relative; z-index: 3; color: var(--tag-color, #ba945d); font-size: 16px; text-shadow: 0 1px 0 rgba(255,255,255,.35), 0 0 8px color-mix(in srgb, var(--tag-color, #ba945d) 30%, transparent); }
+.tag-text { position: relative; z-index: 3; }
 .tag-text { display: none; }
 .start-card { width: 194px; flex: 1; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; }
-.start-card span { position: relative; z-index: 2; display: grid; place-items: center; width: 100%; height: 100%; color: var(--brown-soft); font-size: 18px; line-height: 18px; font-weight: 400; }
+.start-card span { position: relative; z-index: 3; display: grid; place-items: center; width: 100%; height: 100%; color: var(--brown-soft); font-size: 18px; line-height: 18px; font-weight: 400; }
 .record-actions { display: none; position: absolute; left: 177px; bottom: 40px; gap: 8px; z-index: 4; }
-.control-btn { width: 32px; height: 24px; border: none; border-radius: 6px; background: #fff; color: var(--brown); font-size: 0; cursor: pointer; position: relative; }
+.control-btn { width: 32px; height: 24px; border: 1px solid rgba(255,255,255,.72); border-radius: 6px; background: #fff; color: var(--brown); font-size: 0; cursor: pointer; position: relative; overflow: hidden; transition: transform .12s ease, filter .12s ease, border-color .18s ease, box-shadow .18s ease; }
+.control-btn.hoof-press { transform: translateY(1px) scale(.97); filter: brightness(.96); }
+.control-btn .hoof-dust { bottom: 3px; transform-origin: center bottom; animation-duration: .42s; }
+.is-paused #pauseBtn {
+  border-color: color-mix(in srgb, var(--tag-color, #ba945d) 72%, white);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--tag-color, #ba945d) 58%, transparent),
+    0 0 12px color-mix(in srgb, var(--tag-color, #ba945d) 42%, transparent),
+    inset 0 0 0 1px rgba(255,255,255,.55);
+  animation: pauseTagBreath 1.45s ease-in-out infinite;
+}
+.is-paused #pauseBtn::before {
+  background: linear-gradient(90deg, var(--tag-color, #ba945d) 0 35%, transparent 35% 65%, var(--tag-color, #ba945d) 65% 100%);
+}
+#pauseBtn.resume-pulse {
+  border-color: color-mix(in srgb, var(--tag-color, #ba945d) 76%, white);
+  animation: resumeTagPulse .48s cubic-bezier(.18,.78,.18,1) both;
+}
+@keyframes pauseTagBreath {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--tag-color, #ba945d) 44%, transparent),
+      0 0 7px color-mix(in srgb, var(--tag-color, #ba945d) 24%, transparent),
+      inset 0 0 0 1px rgba(255,255,255,.50);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--tag-color, #ba945d) 74%, transparent),
+      0 0 16px color-mix(in srgb, var(--tag-color, #ba945d) 54%, transparent),
+      inset 0 0 0 1px rgba(255,255,255,.72);
+  }
+}
+@keyframes resumeTagPulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--tag-color, #ba945d) 65%, transparent), inset 0 0 0 1px rgba(255,255,255,.62); }
+  45% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--tag-color, #ba945d) 32%, transparent), 0 0 18px color-mix(in srgb, var(--tag-color, #ba945d) 54%, transparent), inset 0 0 0 1px rgba(255,255,255,.72); }
+  100% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--tag-color, #ba945d) 0%, transparent), inset 0 0 0 1px rgba(255,255,255,.42); }
+}
 .control-btn::before { content: ''; position: absolute; left: 10px; top: 6px; width: 12px; height: 12px; border-radius: 2px; background: var(--paper); }
 #pauseBtn::before { width: 10px; left: 11px; background: linear-gradient(90deg, var(--paper) 0 35%, transparent 35% 65%, var(--paper) 65% 100%); }
 #pauseBtn:disabled, #stopBtn:disabled { opacity: .45; cursor: default; }

@@ -45,6 +45,7 @@ app.innerHTML = `
 
       <section class="quick-row no-drag">
         <button id="tagButton" class="tag-card" title="选择标签">
+          <span class="pause-breath-ring" aria-hidden="true"></span>
           <span class="tag-mark">◆</span>
           <span id="currentTagLabel" class="tag-text">未选择标签</span>
         </button>
@@ -94,6 +95,18 @@ function hmShort(sec) {
 }
 function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]))
+}
+function playHoofDust(btn) {
+  if (!btn || btn.disabled) return
+  btn.classList.remove('hoof-press')
+  void btn.offsetWidth
+  btn.classList.add('hoof-press')
+  const dust = document.createElement('span')
+  dust.className = 'hoof-dust'
+  dust.setAttribute('aria-hidden', 'true')
+  btn.appendChild(dust)
+  setTimeout(() => dust.remove(), 520)
+  setTimeout(() => btn.classList.remove('hoof-press'), 260)
 }
 
 async function loadSettings() {
@@ -161,11 +174,14 @@ function renderTagButton() {
   const name = active?.name || tag?.name || '未选择标签'
   const currentTagLabel = document.getElementById('currentTagLabel')
   const tagButton = document.getElementById('tagButton')
+  const pauseBtn = document.getElementById('pauseBtn')
+  const tagColor = active?.color || tag?.color || '#ba945d'
   currentTagLabel.textContent = current ? name : (tag ? tag.name : '选择标签')
   currentTagLabel.title = name
   document.getElementById('idleTagLabel').textContent = tag ? `当前标签 · ${tag.name}` : '选择标签后开始记录'
   document.getElementById('recordTagLabel').textContent = active ? active.name : '未选择标签'
-  tagButton.style.setProperty('--tag-color', active?.color || tag?.color || '#ba945d')
+  tagButton.style.setProperty('--tag-color', tagColor)
+  pauseBtn?.style.setProperty('--tag-color', tagColor)
 }
 function renderTags() {
   renderTagButton()
@@ -344,11 +360,33 @@ shell.addEventListener('mouseenter', () => { pointerInside = true; wake() })
 shell.addEventListener('mouseleave', () => { pointerInside = false; resetIdleTimer() })
 shell.addEventListener('mousemove', () => { pointerInside = true; clearTimeout(idleTimer) })
 shell.addEventListener('mousedown', wake)
-document.getElementById('tagButton').addEventListener('click', togglePause)
+document.getElementById('tagButton').addEventListener('click', (e) => {
+  const btn = e.currentTarget
+  const resuming = !!current?.paused
+  playHoofDust(btn)
+  if (resuming) {
+    btn.classList.remove('resume-pulse')
+    void btn.offsetWidth
+    btn.classList.add('resume-pulse')
+    setTimeout(() => btn.classList.remove('resume-pulse'), 520)
+  }
+  togglePause()
+})
 document.getElementById('tagTopBtn').addEventListener('click', () => setMenu(!menuOpen))
-document.getElementById('toggleBtn').addEventListener('click', toggleRecord)
-document.getElementById('pauseBtn').addEventListener('click', togglePause)
-document.getElementById('stopBtn').addEventListener('click', stopRecord)
+document.getElementById('toggleBtn').addEventListener('click', (e) => { playHoofDust(e.currentTarget); toggleRecord() })
+document.getElementById('pauseBtn').addEventListener('click', (e) => {
+  const btn = e.currentTarget
+  const resuming = !!current?.paused
+  playHoofDust(btn)
+  if (resuming) {
+    btn.classList.remove('resume-pulse')
+    void btn.offsetWidth
+    btn.classList.add('resume-pulse')
+    setTimeout(() => btn.classList.remove('resume-pulse'), 520)
+  }
+  togglePause()
+})
+document.getElementById('stopBtn').addEventListener('click', (e) => { playHoofDust(e.currentTarget); stopRecord() })
 document.getElementById('hide').addEventListener('click', () => { setMenu(false); api('recorder:hide') })
 document.addEventListener('click', (e) => {
   if (!document.getElementById('tagMenu').contains(e.target) && !document.getElementById('tagButton').contains(e.target) && !document.getElementById('tagTopBtn').contains(e.target)) setMenu(false)
