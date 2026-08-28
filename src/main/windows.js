@@ -164,8 +164,8 @@ function roundedCapsuleShape(width, height) {
 function applyRecorderShape(collapsed, width, height) {
   if (!recorderWin || typeof recorderWin.setShape !== 'function') return
   try {
-    const layout = recorderLayout()
-    recorderWin.setShape(collapsed && layout.displayMode === 'capsule' ? roundedCapsuleShape(width, height) : [])
+    // 胶囊使用 CSS border-radius + 透明窗口渲染，避免 Windows setShape 按像素行裁切造成两侧锯齿/像素块。
+    recorderWin.setShape([])
   } catch (_) {
     // setShape 在部分 Electron/Windows 组合上可能不可用，失败时退回透明窗口。
   }

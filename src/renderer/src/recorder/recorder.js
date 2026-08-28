@@ -16,7 +16,7 @@ app.innerHTML = `
       <div class="titlebar">
         <div class="title">Niuma Recorder</div>
         <div class="title-actions no-drag">
-          <button id="tagTopBtn" class="top-icon" title="选择标签">⌄</button>
+          <button id="tagTopBtn" class="top-icon" title="选择标签"><span class="top-icon-glyph">⌄</span></button>
           <button id="hide" class="top-icon" title="隐藏到托盘">×</button>
         </div>
       </div>
@@ -38,6 +38,7 @@ app.innerHTML = `
         <div class="record-copy">
           <div class="record-label">已记录</div>
           <div id="timer" class="timer num">00:00:00</div>
+          <div id="pauseElapsed" class="pause-elapsed">暂停 00:00</div>
           <div id="recordTagLabel" class="record-tag">未选择标签</div>
         </div>
       </section>
@@ -69,6 +70,7 @@ let selectedTagId = null
 let paused = false
 let menuOpen = false
 let collapsed = false
+let pointerInside = false
 let idleTimer = null
 let messageTimer = null
 let activeMessage = null
@@ -157,10 +159,13 @@ function renderTagButton() {
   const tag = currentTag()
   const active = activeTag()
   const name = active?.name || tag?.name || '未选择标签'
-  document.getElementById('currentTagLabel').textContent = current ? name : (tag ? tag.name : '选择标签')
-  document.getElementById('currentTagLabel').title = name
+  const currentTagLabel = document.getElementById('currentTagLabel')
+  const tagButton = document.getElementById('tagButton')
+  currentTagLabel.textContent = current ? name : (tag ? tag.name : '选择标签')
+  currentTagLabel.title = name
   document.getElementById('idleTagLabel').textContent = tag ? `当前标签 · ${tag.name}` : '选择标签后开始记录'
   document.getElementById('recordTagLabel').textContent = active ? active.name : '未选择标签'
+  tagButton.style.setProperty('--tag-color', active?.color || tag?.color || '#ba945d')
 }
 function renderTags() {
   renderTagButton()
@@ -169,11 +174,21 @@ function renderTags() {
     <button class="tag-option" data-id="${t.id}" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}</button>
   `).join('') : '<div class="tag-empty">暂无标签，请先到设置页配置</div>'
   menu.querySelectorAll('.tag-option').forEach((b) => {
-    b.addEventListener('click', () => {
-      saveSelectedTag(Number(b.dataset.id))
+    b.addEventListener('click', async () => {
+      await chooseTag(Number(b.dataset.id))
       setMenu(false)
     })
   })
+}
+async function chooseTag(id) {
+  await saveSelectedTag(id)
+  if (current?.paused && current.pause_point_id) {
+    const r = await api('ledger:applyPausePointTag', { entryId: current.id, pointId: current.pause_point_id, tagId: id })
+    if (!r.ok) return alert(r.error || '标签修改失败')
+    await refresh()
+  } else {
+    render()
+  }
 }
 function setMenu(open) {
   menuOpen = open
@@ -192,12 +207,12 @@ function setCollapsed(next, syncWindow = true) {
 }
 function resetIdleTimer() {
   clearTimeout(idleTimer)
-  if (menuOpen || !current) return
+  if (menuOpen || !current || pointerInside) return
   idleTimer = setTimeout(() => setCollapsed(true), IDLE_COLLAPSE_MS)
 }
 function wake() {
+  clearTimeout(idleTimer)
   if (collapsed) setCollapsed(false)
-  else resetIdleTimer()
 }
 
 function showMessage(payload = {}) {
@@ -249,6 +264,7 @@ function renderStateClass() {
 function render() {
   const timer = document.getElementById('timer')
   const recordLabel = document.querySelector('.record-label')
+  const pauseElapsed = document.getElementById('pauseElapsed')
   const toggleBtn = document.getElementById('toggleBtn')
   const pauseBtn = document.getElementById('pauseBtn')
   const stopBtn = document.getElementById('stopBtn')
@@ -265,18 +281,24 @@ function render() {
     timer.textContent = hmShort((end - current.start_time) / 1000)
     recordLabel.textContent = current.paused ? '暂停中' : '记录中'
     const pausedDelta = current.paused ? hms((Date.now() - current.paused_at) / 1000) : ''
-    document.getElementById('toggleLabel').textContent = current.paused ? '继续记录' : '暂停记录'
-    toggleBtn.title = current.paused ? '继续' : '暂停'
+    pauseElapsed.textContent = current.paused ? `暂停 ${pausedDelta}` : ''
+    pauseElapsed.style.display = current.paused ? 'block' : 'none'
+    document.getElementById('toggleLabel').textContent = '停止记录'
+    toggleBtn.title = '停止记录'
     pauseBtn.textContent = current.paused ? '继续' : '暂停'
+    pauseBtn.title = current.paused ? '继续记录' : '暂停记录'
     pauseBtn.disabled = false
     stopBtn.disabled = false
-    hint.textContent = current.paused ? `暂停中：${pausedDelta}` : '记录中：悬停可展开，空闲后回到小面板'
+    hint.textContent = current.paused ? `暂停中：${pausedDelta}` : '记录中：鼠标离开后 5 秒收起为胶囊' 
   } else {
     timer.textContent = '00:00'
     recordLabel.textContent = '准备记录'
+    pauseElapsed.textContent = ''
+    pauseElapsed.style.display = 'none'
     document.getElementById('toggleLabel').textContent = '开始记录'
     toggleBtn.title = '开始记录'
     pauseBtn.textContent = '暂停'
+    pauseBtn.title = '暂无记录可暂停'
     pauseBtn.disabled = true
     stopBtn.disabled = true
     hint.textContent = selectedTag() ? '点击开始记录当前标签' : '选择标签后开始记录'
@@ -307,20 +329,25 @@ async function stopRecord() {
   paused = false
   await refresh()
 }
+async function togglePause() {
+  if (!current) return
+  if (current.paused) return startRecord()
+  return pauseRecord()
+}
 async function toggleRecord() {
-  if (current?.paused) return startRecord()
-  if (current) return pauseRecord()
+  if (current) return stopRecord()
   return startRecord()
 }
 
 const shell = document.querySelector('.recorder-shell')
-shell.addEventListener('mouseenter', wake)
-shell.addEventListener('mousemove', resetIdleTimer)
+shell.addEventListener('mouseenter', () => { pointerInside = true; wake() })
+shell.addEventListener('mouseleave', () => { pointerInside = false; resetIdleTimer() })
+shell.addEventListener('mousemove', () => { pointerInside = true; clearTimeout(idleTimer) })
 shell.addEventListener('mousedown', wake)
-document.getElementById('tagButton').addEventListener('click', () => setMenu(!menuOpen))
+document.getElementById('tagButton').addEventListener('click', togglePause)
 document.getElementById('tagTopBtn').addEventListener('click', () => setMenu(!menuOpen))
 document.getElementById('toggleBtn').addEventListener('click', toggleRecord)
-document.getElementById('pauseBtn').addEventListener('click', toggleRecord)
+document.getElementById('pauseBtn').addEventListener('click', togglePause)
 document.getElementById('stopBtn').addEventListener('click', stopRecord)
 document.getElementById('hide').addEventListener('click', () => { setMenu(false); api('recorder:hide') })
 document.addEventListener('click', (e) => {
