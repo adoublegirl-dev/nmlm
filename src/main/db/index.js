@@ -32,12 +32,19 @@ const tagsRepo = {
     return getDb().prepare('SELECT * FROM tags WHERE id = ?').get(id)
   },
   getByName(name) {
-    return getDb().prepare('SELECT * FROM tags WHERE name = ?').get(name)
+    const normalized = String(name ?? '').trim()
+    if (!normalized) return undefined
+    return getDb().prepare('SELECT * FROM tags WHERE LOWER(TRIM(name)) = LOWER(?) LIMIT 1').get(normalized)
   },
-  create({ name, color = '#D4AF6A', shortcutKey = null, isBreak = 0 }) {
+  create({ name, color = '#D4AF6A', shortcutKey = null, isBreak = 0 } = {}) {
+    const normalized = String(name ?? '').trim()
+    if (!normalized) throw new Error('工作类型名称不能为空')
+    if (this.getByName(normalized)) throw new Error('已存在同名工作类型')
+    const now = Date.now()
+    const nextSortOrder = Number(getDb().prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS value FROM tags').get()?.value || 1)
     const info = getDb()
       .prepare('INSERT INTO tags (name, color, shortcut_key, sort_order, is_break, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(name, color, shortcutKey, Date.now() % 1000, isBreak, Date.now())
+      .run(normalized, color, shortcutKey, nextSortOrder, isBreak, now)
     return this.get(info.lastInsertRowid)
   },
   update(id, patch) {
@@ -129,7 +136,7 @@ const entriesRepo = {
   }
 }
 
-// ---------- 暂停点仓储 ----------
+// ---------- 时间轴切点仓储 ----------
 const ledgerRevisionsRepo = {
   insert({ entryId = null, action, before = null, after = null }) {
     const info = getDb()
@@ -142,7 +149,7 @@ const ledgerRevisionsRepo = {
   }
 }
 
-const pausePointsRepo = {
+const timelinePointsRepo = {
   insert({ entryId = null, ts = Date.now(), detail = null, tagId = null }) {
     const info = getDb()
       .prepare('INSERT INTO pause_points (entry_id, ts, detail, tag_id, created_at) VALUES (?, ?, ?, ?, ?)')
@@ -177,6 +184,22 @@ const pausePointsRepo = {
   removeByEntry(entryId) {
     getDb().prepare('DELETE FROM pause_points WHERE entry_id = ?').run(entryId)
     return { ok: true }
+  }
+}
+
+const timelineMarkersRepo = {
+  insert({ entryId = null, ts = Date.now() } = {}) {
+    const now = Date.now()
+    const info = getDb()
+      .prepare('INSERT INTO timeline_markers (entry_id, ts, created_at) VALUES (?, ?, ?)')
+      .run(entryId, ts, now)
+    return this.get(info.lastInsertRowid)
+  },
+  get(id) {
+    return getDb().prepare('SELECT * FROM timeline_markers WHERE id = ?').get(id)
+  },
+  listByRange(start, end) {
+    return getDb().prepare('SELECT * FROM timeline_markers WHERE ts >= ? AND ts < ? ORDER BY ts').all(start, end)
   }
 }
 
@@ -518,4 +541,4 @@ const settingsRepo = {
   }
 }
 
-module.exports = { init, getDb, tagsRepo, entriesRepo, ledgerRevisionsRepo, pausePointsRepo, todosRepo, screenshotsRepo, evidenceRepo, packsRepo, activityRepo, settingsRepo }
+module.exports = { init, getDb, tagsRepo, entriesRepo, ledgerRevisionsRepo, timelinePointsRepo, timelineMarkersRepo, todosRepo, screenshotsRepo, evidenceRepo, packsRepo, activityRepo, settingsRepo }

@@ -27,7 +27,8 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "better-sqlite3": "^12.11.1",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "lucide": "^1.37.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.5",

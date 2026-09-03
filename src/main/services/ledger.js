@@ -1,11 +1,9 @@
-// 台账状态机：兼容旧 start/stop，同时支持任务播放器 switchTask / complete / pausePoint。
-const { getDb, entriesRepo, tagsRepo, pausePointsRepo, ledgerRevisionsRepo } = require('../db')
+// 台账状态机：兼容 start/stop，同时支持任务播放器 switchTask / complete / timeline point。
+const { getDb, entriesRepo, tagsRepo, timelinePointsRepo, timelineMarkersRepo, ledgerRevisionsRepo } = require('../db')
 const { FRAGMENT_THRESHOLD_SEC } = require('../../shared/constants')
 const winUtil = require('../utils/window')
 
 let emitter = null
-let pausedSession = null // { entryId, pointId, pausedAt }
-
 function attachEventSender(fn) { emitter = fn }
 function emit(state, entry) { if (emitter) emitter({ state, entry }) }
 
@@ -15,23 +13,12 @@ function rawCurrent() {
 
 function activeSegmentTagId(entry) {
   if (!entry) return null
-  const points = pausePointsRepo.listByEntry(entry.id)
+  const points = timelinePointsRepo.listByEntry(entry.id)
   const latest = points[points.length - 1]
   return latest && latest.tag_id != null ? latest.tag_id : entry.tag_id
 }
 
-function decoratePaused(entry) {
-  if (!entry) {
-    pausedSession = null
-    return null
-  }
-  const activeTagId = activeSegmentTagId(entry)
-  if (pausedSession && pausedSession.entryId === entry.id) {
-    return { ...entry, active_tag_id: activeTagId, paused: true, paused_at: pausedSession.pausedAt, pause_point_id: pausedSession.pointId }
-  }
-  if (pausedSession && pausedSession.entryId !== entry.id) pausedSession = null
-  return { ...entry, active_tag_id: activeTagId, paused: false }
-}
+function decorateCurrent(entry) { return entry ? { ...entry, active_tag_id: activeSegmentTagId(entry) } : null }
 
 function validTagId(tagId) {
   if (tagId == null) return null
@@ -78,19 +65,15 @@ async function finishEntry(entry, { tagId, detail, endTime = Date.now(), state =
   return updated
 }
 
-// 旧接口：开始一个未标记段；如果当前处于暂停态，则转为“继续”。
+// 开始一条进行中的记录。
 async function start({ tagId = null, detail = null } = {}) {
   const finalTagId = validTagId(tagId)
   if (tagId != null && finalTagId == null) return { ok: false, error: '标签不存在' }
   const cur = rawCurrent()
-  if (cur) {
-    if (pausedSession && pausedSession.entryId === cur.id) return resume({ tagId: finalTagId ?? cur.tag_id, detail })
-    return { ok: false, error: '已在记录中' }
-  }
+  if (cur) return { ok: false, error: '已在记录中' }
   const entry = entriesRepo.insert({ startTime: Date.now(), tagId: finalTagId, detail })
-  pausedSession = null
   emit('recording', entry)
-  return { ok: true, entry: decoratePaused(entry) }
+  return { ok: true, entry: decorateCurrent(entry) }
 }
 
 // 旧接口：结束当前段。默认保留当前标签/备注；传 tagId/detail 时覆盖
@@ -103,7 +86,6 @@ async function switchTask({ tagId = null, detail = null } = {}) {
   const finalTagId = validTagId(tagId)
   if (tagId != null && finalTagId == null) return { ok: false, error: '标签不存在' }
   const previous = rawCurrent()
-  if (previous && pausedSession && pausedSession.entryId === previous.id) return resume({ tagId: finalTagId, detail })
   const now = Date.now()
   let finished = null
   if (previous) finished = await finishEntry(previous, { endTime: now, state: 'switched' })
@@ -114,78 +96,19 @@ async function switchTask({ tagId = null, detail = null } = {}) {
     detail,
     windowTitle: win ? win.title : null
   })
-  pausedSession = null
   emit('recording', entry)
-  return { ok: true, entry: decoratePaused(entry), finished }
+  return { ok: true, entry: decorateCurrent(entry), finished }
 }
 
 // 新接口：完成当前任务，不开启新任务
 async function complete({ tagId, detail } = {}) {
   const cur = rawCurrent()
   if (!cur) return { ok: false, error: '没有进行中的任务' }
-  const endTime = pausedSession && pausedSession.entryId === cur.id ? pausedSession.pausedAt : Date.now()
-  if (pausedSession && pausedSession.entryId === cur.id && pausedSession.pointId) pausePointsRepo.remove(pausedSession.pointId)
-  pausedSession = null
-  const entry = await finishEntry(cur, { tagId, detail, endTime, state: 'completed' })
+  const entry = await finishEntry(cur, { tagId, detail, endTime: Date.now(), state: 'completed' })
   return { ok: true, entry }
 }
 
-// F8 暂停：不结束当前记录，只在时间轴上留下一个暂停点，并进入暂停态。
-async function pause({ detail = null } = {}) {
-  const cur = rawCurrent()
-  if (!cur) return { ok: false, error: '没有进行中的记录' }
-  if (pausedSession && pausedSession.entryId === cur.id) return { ok: true, entry: decoratePaused(cur), paused: true }
-  const pausedAt = Date.now()
-  const point = pausePointsRepo.insert({ entryId: cur.id, ts: pausedAt, detail, tagId: activeSegmentTagId(cur) })
-  pausedSession = { entryId: cur.id, pointId: point.id, pausedAt }
-  const entry = decoratePaused(cur)
-  emit('paused', { entry, point })
-  return { ok: true, entry, point, paused: true }
-}
-
-async function resume({ tagId = null, detail = null } = {}) {
-  const cur = rawCurrent()
-  if (!cur) return { ok: false, error: '没有可继续的记录' }
-  if (!pausedSession || pausedSession.entryId !== cur.id) return { ok: true, entry: decoratePaused(cur), resumed: false }
-  const finalTagId = tagId == null ? cur.tag_id : validTagId(tagId)
-  if (tagId != null && finalTagId == null) return { ok: false, error: '标签不存在' }
-  const pausedAt = pausedSession.pausedAt
-  const pointId = pausedSession.pointId
-
-  if (Number(finalTagId) === Number(cur.tag_id)) {
-    pausedSession = null
-    const entry = decoratePaused(entriesRepo.get(cur.id))
-    emit('recording', entry)
-    return { ok: true, entry, resumed: true, split: false }
-  }
-
-  const win = await winUtil.getActiveWindow().catch(() => null)
-  const durationSec = Math.max(0, Math.floor((pausedAt - cur.start_time) / 1000))
-  const tx = getDb().transaction(() => {
-    pausePointsRepo.remove(pointId)
-    const finished = entriesRepo.finish(cur.id, {
-      endTime: pausedAt,
-      durationSec,
-      tagId: cur.tag_id,
-      detail: cur.detail,
-      windowTitle: win ? win.title : cur.window_title,
-      isFragment: durationSec < FRAGMENT_THRESHOLD_SEC ? 1 : 0
-    })
-    const entry = entriesRepo.insert({
-      startTime: pausedAt,
-      tagId: finalTagId,
-      detail,
-      windowTitle: win ? win.title : null
-    })
-    return { finished, entry }
-  })
-  const result = tx()
-  pausedSession = null
-  emit('recording', result.entry)
-  return { ok: true, entry: decoratePaused(result.entry), finished: result.finished, resumed: true, split: true }
-}
-
-function current() { return decoratePaused(rawCurrent()) }
+function current() { return decorateCurrent(rawCurrent()) }
 
 function sameTag(a, b) {
   return Number(a?.tag_id ?? 0) === Number(b?.tag_id ?? 0)
@@ -209,7 +132,7 @@ function mergeAdjacentSameTagAround(entryId) {
         windowTitle: prev.window_title || cur.window_title,
         isFragment: isFragmentByDuration(durationSec)
       })
-      pausePointsRepo.removeByEntry(cur.id)
+      timelinePointsRepo.removeByEntry(cur.id)
       entriesRepo.remove(cur.id)
       cur = entriesRepo.get(prev.id)
       changed = true
@@ -226,7 +149,7 @@ function mergeAdjacentSameTagAround(entryId) {
         windowTitle: cur.window_title || next.window_title,
         isFragment: isFragmentByDuration(durationSec)
       })
-      pausePointsRepo.removeByEntry(next.id)
+      timelinePointsRepo.removeByEntry(next.id)
       entriesRepo.remove(next.id)
       cur = entriesRepo.get(cur.id)
       changed = true
@@ -252,10 +175,10 @@ function adjustTime({ id, startTime, endTime } = {}) {
   if (!range.ok) return range
   const overlap = assertNoOverlap(range.startTime, range.endTime, { excludeId: entry.id })
   if (!overlap.ok) return overlap
-  const points = pausePointsRepo.listByEntry(entry.id)
+  const points = timelinePointsRepo.listByEntry(entry.id)
   const outPoint = points.find((p) => p.ts <= range.startTime || p.ts >= range.endTime)
   if (outPoint) return { ok: false, error: '已有时间节点超出新的起止范围，请先调整切点或拆分记录' }
-  const before = { ...entry, pausePoints: points }
+  const before = { ...entry, timelinePoints: points }
   const updated = entriesRepo.updateTime(entry.id, {
     startTime: range.startTime,
     endTime: range.endTime,
@@ -288,15 +211,17 @@ function manualCreate({ startTime, endTime, tagId = null, detail = null } = {}) 
   return { ok: true, entry }
 }
 
-function addPausePoint({ detail = null } = {}) {
+function addKeyframe({ detail = null } = {}) {
   const cur = entriesRepo.current()
   if (!cur) return { ok: false, error: '没有进行中的任务' }
-  const point = pausePointsRepo.insert({ entryId: cur.id, detail })
-  emit('pause-point', { entry: cur, point })
-  return { ok: true, point }
+  const point = timelinePointsRepo.insert({ entryId: cur.id, detail })
+  const marker = timelineMarkersRepo.insert({ entryId: cur.id, ts: point.ts })
+  emit('keyframe', { entry: cur, point, marker })
+  return { ok: true, point, marker }
 }
 
-function listPausePointsByRange(start, end) { return pausePointsRepo.listByRange(start, end) }
+function listTimelinePointsByRange(start, end) { return timelinePointsRepo.listByRange(start, end) }
+function listTimelineMarkersByRange(start, end) { return timelineMarkersRepo.listByRange(start, end) }
 function listByRange(start, end) { return entriesRepo.listByRange(start, end) }
 
 function formatNodeTime(ts) {
@@ -313,20 +238,20 @@ function appendNodeNotes(detail, points = []) {
   return detail ? `${detail}\n${block}` : block
 }
 
-function applyPausePointPlan({ entryId, points = [], baseTagId, detail, cleanupSameTagPoints = false } = {}) {
+function applyTimelinePointPlan({ entryId, points = [], baseTagId, detail, cleanupSameTagPoints = false } = {}) {
   const entry = entriesRepo.get(entryId)
   if (!entry) return { ok: false, error: '记录不存在' }
   const finalBaseTagId = baseTagId !== undefined ? validTagId(baseTagId) : entry.tag_id
   if (baseTagId != null && finalBaseTagId == null) return { ok: false, error: '标签不存在' }
   const finalDetail = detail !== undefined ? detail : entry.detail
   const splitEnd = entry.end_time || Date.now()
-  const existing = pausePointsRepo.listByEntry(entry.id)
+  const existing = timelinePointsRepo.listByEntry(entry.id)
   const existingIds = new Set(existing.map((p) => p.id))
   const normalizedPoints = []
   for (const p of points) {
     const idNum = Number(p.id)
     const isExisting = Number.isInteger(idNum) && existingIds.has(idNum)
-    if (p.id != null && !String(p.id).startsWith('new-') && !isExisting) return { ok: false, error: '暂停点不存在' }
+    if (p.id != null && !String(p.id).startsWith('new-') && !isExisting) return { ok: false, error: '切点不存在' }
     const finalTagId = validTagId(p.tagId)
     if (p.tagId != null && finalTagId == null) return { ok: false, error: '标签不存在' }
     const pointTs = p.ts !== undefined ? Number(p.ts) : (isExisting ? existing.find((x) => x.id === idNum)?.ts : NaN)
@@ -343,13 +268,13 @@ function applyPausePointPlan({ entryId, points = [], baseTagId, detail, cleanupS
 
   const tx = getDb().transaction(() => {
     for (const p of normalizedPoints) {
-      if (p.id) pausePointsRepo.update(p.id, { ts: p.ts, tagId: p.tagId, detail: p.detail })
-      else pausePointsRepo.insert({ entryId: entry.id, ts: p.ts, tagId: p.tagId, detail: p.detail })
+      if (p.id) timelinePointsRepo.update(p.id, { ts: p.ts, tagId: p.tagId, detail: p.detail })
+      else timelinePointsRepo.insert({ entryId: entry.id, ts: p.ts, tagId: p.tagId, detail: p.detail })
     }
     if (!wantsSplit) {
-      const latestPoints = pausePointsRepo.listByEntry(entry.id).sort((a, b) => a.ts - b.ts)
+      const latestPoints = timelinePointsRepo.listByEntry(entry.id).sort((a, b) => a.ts - b.ts)
       const nextDetail = cleanupSameTagPoints ? appendNodeNotes(finalDetail, latestPoints) : finalDetail
-      if (cleanupSameTagPoints) pausePointsRepo.removeByEntry(entry.id)
+      if (cleanupSameTagPoints) timelinePointsRepo.removeByEntry(entry.id)
       const updated = entriesRepo.updateMeta(entry.id, { tagId: finalBaseTagId, detail: nextDetail })
       return { entries: [updated], split: false, updatedOnly: true, cleaned: !!cleanupSameTagPoints }
     }
@@ -357,7 +282,7 @@ function applyPausePointPlan({ entryId, points = [], baseTagId, detail, cleanupS
     const latestEntry = entriesRepo.get(entry.id)
     const splitEnd = latestEntry.end_time || Date.now()
     const isOngoingSplit = !latestEntry.end_time
-    const latestPoints = pausePointsRepo
+    const latestPoints = timelinePointsRepo
       .listByEntry(entry.id)
       .filter((p) => p.ts > latestEntry.start_time && p.ts < splitEnd)
       .sort((a, b) => a.ts - b.ts)
@@ -383,7 +308,7 @@ function applyPausePointPlan({ entryId, points = [], baseTagId, detail, cleanupS
     }
     if (!merged.length) return { entries: [latestEntry], split: false }
 
-    pausePointsRepo.removeByEntry(latestEntry.id)
+    timelinePointsRepo.removeByEntry(latestEntry.id)
     const created = []
     const writeSegment = (baseId, s) => {
       const durationSec = Math.max(0, Math.floor((s.end - s.start) / 1000))
@@ -427,23 +352,21 @@ function applyPausePointPlan({ entryId, points = [], baseTagId, detail, cleanupS
     getDb().prepare('UPDATE time_entries SET start_time = ? WHERE id = ?').run(first.start, latestEntry.id)
     created.push(writeSegment(latestEntry.id, first))
     for (const s of merged.slice(1)) created.push(writeSegment(null, s))
-    if (isOngoingSplit && pausedSession && pausedSession.entryId === latestEntry.id) pausedSession = null
     return { entries: created, split: created.length > 1 }
   })
 
   const result = tx()
-  emit(result.split ? 'split' : 'pause-point-updated', result)
+  emit(result.split ? 'split' : 'timeline-point-updated', result)
   return { ok: true, ...result }
 }
 
-function applyPausePointTag({ entryId, pointId, tagId = null } = {}) {
-  const point = pausePointsRepo.get(pointId)
-  if (!point) return { ok: false, error: '暂停点不存在' }
-  return applyPausePointPlan({ entryId, points: [{ id: pointId, tagId, detail: point.detail }] })
+function applyTimelinePointTag({ entryId, pointId, tagId = null } = {}) {
+  const point = timelinePointsRepo.get(pointId)
+  if (!point) return { ok: false, error: '切点不存在' }
+  return applyTimelinePointPlan({ entryId, points: [{ id: pointId, tagId, detail: point.detail }] })
 }
 
 function recover(now = Date.now()) {
-  pausedSession = null
   const unfinished = entriesRepo.allUnfinished()
   for (const e of unfinished) {
     const other = tagsRepo.findOtherTag()
@@ -466,16 +389,15 @@ module.exports = {
   stop,
   switchTask,
   complete,
-  pause,
-  resume,
   current,
   listByRange,
   retag,
   adjustTime,
   manualCreate,
-  addPausePoint,
-  listPausePointsByRange,
-  applyPausePointTag,
-  applyPausePointPlan,
+  addKeyframe,
+  listTimelinePointsByRange,
+  listTimelineMarkersByRange,
+  applyTimelinePointTag,
+  applyTimelinePointPlan,
   recover
 }

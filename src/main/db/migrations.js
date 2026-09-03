@@ -237,6 +237,23 @@ const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS idx_todos_phase_range ON todos(phase_start_at, phase_end_at);
       CREATE INDEX IF NOT EXISTS idx_todos_phase_completed ON todos(phase_completed_at);
     `
+  },
+  {
+    version: 10,
+    name: 'timeline-markers',
+    sql: `
+      CREATE TABLE IF NOT EXISTS timeline_markers (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        entry_id    INTEGER REFERENCES time_entries(id) ON DELETE SET NULL,
+        ts          INTEGER NOT NULL,
+        created_at  INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_timeline_markers_ts ON timeline_markers(ts);
+      CREATE INDEX IF NOT EXISTS idx_timeline_markers_entry ON timeline_markers(entry_id);
+
+      INSERT INTO timeline_markers (entry_id, ts, created_at)
+      SELECT entry_id, ts, created_at FROM pause_points;
+    `
   }
 ]
 

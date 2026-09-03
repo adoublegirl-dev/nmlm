@@ -29,7 +29,7 @@ function buildMenu(actions) {
     items.push({ label: '● 记录中', enabled: false })
   }
   items.push(
-    { label: currentState === 'recording' ? '停止记录  F9' : '开始/暂停记录  F8', click: () => actions.toggleRecord() },
+    { label: currentState === 'recording' ? '停止记录  F9' : '开始记录  F8', click: () => currentState === 'recording' ? actions.stopRecord() : actions.primaryRecordAction() },
     { label: recorderVisible ? '隐藏记录器' : '显示记录器', click: () => recorderVisible ? actions.hideRecorder() : actions.openRecorder() },
     { label: '快捷截图  F10', click: () => actions.screenshot() },
     { type: 'separator' },

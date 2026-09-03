@@ -2,10 +2,19 @@
 import { api } from '../api'
 import './tagpicker.css'
 
-const entryId = new URLSearchParams(location.search).get('entryId')
+const params = new URLSearchParams(location.search)
+const entryId = params.get('entryId')
+const segmentMode = params.get('mode') === 'segment'
+const target = params.get('target') || 'base'
+const pointId = params.get('pointId') || null
 
 const app = document.getElementById('tagpicker-app')
-app.innerHTML = `
+app.innerHTML = segmentMode ? `
+  <div class="tp tp-segment">
+    <div class="tp-title">选择工作类型</div>
+    <div id="tags" class="tp-tags"></div>
+  </div>
+` : `
   <div class="tp">
     <div class="tp-title">这段在做什么？</div>
     <div id="tags" class="tp-tags"></div>
@@ -21,9 +30,9 @@ async function loadTags() {
   tags = r.tags || []
   const el = document.getElementById('tags')
   el.innerHTML = tags.map((t) => `
-    <button class="tp-tag" data-id="${t.id}" data-key="${t.shortcut_key ?? ''}" style="--c:${t.color}">
-      <span class="k">${t.shortcut_key != null ? t.shortcut_key : '·'}</span>
-      ${t.name}
+    <button class="tp-tag" data-id="${t.id}" data-key="${t.shortcut_key ?? ''}">
+      ${segmentMode ? '' : `<span class="k">${t.shortcut_key != null ? t.shortcut_key : '·'}</span>`}
+      <span class="tp-tag-name">${escapeHtml(t.name)}</span>
     </button>
   `).join('')
   el.querySelectorAll('.tp-tag').forEach((b) => {
@@ -32,8 +41,9 @@ async function loadTags() {
 }
 
 async function confirmTag(tagId) {
-  const detail = document.getElementById('detail').value.trim() || null
-  const r = await api('tagpicker:confirm', { entryId, tagId, detail })
+  const detail = document.getElementById('detail')?.value.trim() || null
+  const channel = segmentMode ? 'tagpicker:confirmSegment' : 'tagpicker:confirm'
+  const r = await api(channel, { entryId, target, pointId, tagId, detail })
   if (r.ok) {
     try { window.close() } catch { location.href = 'about:blank' }
   }
@@ -49,13 +59,13 @@ document.addEventListener('keydown', (e) => {
     cancel()
     return
   }
-  if (e.key === 'Enter') {
+  if (!segmentMode && e.key === 'Enter') {
     const detail = document.getElementById('detail').value.trim()
     const other = tags.find((t) => t.shortcut_key === 0)
     confirmTag(other ? other.id : tags[0]?.id)
     return
   }
-  if (/^[0-9]$/.test(e.key)) {
+  if (!segmentMode && /^[0-9]$/.test(e.key)) {
     const n = Number(e.key)
     const tag = tags.find((t) => t.shortcut_key === n)
     if (tag) confirmTag(tag.id)
@@ -63,3 +73,7 @@ document.addEventListener('keydown', (e) => {
 })
 
 loadTags()
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]))
+}

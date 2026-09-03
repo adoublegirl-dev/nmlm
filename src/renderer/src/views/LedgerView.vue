@@ -12,7 +12,7 @@
         <button v-if="!recording" class="btn primary" @click="doStart">开始记录</button>
         <template v-else>
           <button class="btn primary" @click="doStop">完成记录</button>
-          <button class="btn" @click="doPause">加节点</button>
+          <button class="btn" @click="addKeyframe">打关键帧</button>
         </template>
       </div>
     </div>
@@ -168,11 +168,11 @@
           <span v-if="s.crossDay" class="cross-chip" :title="s.actualRangeText">跨天</span>
           <span class="seg-dur num">{{ s.durText }}</span>
           <span v-if="s.is_fragment" class="frag muted">碎片</span>
-          <span class="pause-chip">节点 × {{ s.pausePoints?.length || 0 }}</span>
+          <span class="point-chip">节点 × {{ s.timelinePoints?.length || 0 }}</span>
           <span v-if="s.detail" class="seg-detail muted">{{ s.detail }}</span>
         </div>
-        <div v-if="s.pausePoints?.length" class="pause-summary muted">
-          <span v-for="p in s.pausePoints" :key="p.id" class="pause-summary-item">
+        <div v-if="s.timelinePoints?.length" class="point-summary muted">
+          <span v-for="p in s.timelinePoints" :key="p.id" class="point-summary-item">
             {{ p.timeText }}{{ p.detail ? ' · ' + p.detail : ' · 未说明' }}
           </span>
         </div>
@@ -200,19 +200,19 @@
             >{{ t.name }}</button>
           </div>
           <textarea v-model="editForm.detail" class="input edit-detail" placeholder="写点什么：这段在做什么、为什么被切碎…" rows="3"></textarea>
-          <div v-if="s.end_time" class="pause-editor">
-            <div class="pause-editor-head">
+          <div v-if="s.end_time" class="point-editor">
+            <div class="point-editor-head">
               <h4>时间节点切分</h4>
-              <button class="btn small" @click="addDraftPausePoint">+ 添加切点</button>
+              <button class="btn small" @click="addDraftTimelinePoint">+ 添加切点</button>
             </div>
             <div class="muted split-hint">切点表示“从这个时间点开始进入新标签”。不同标签会拆分记录，连续同标签会自动合并。</div>
-            <div v-if="!editForm.pausePoints.length" class="muted split-hint">还没有切点，可以添加一个时间点来事后拆分这段记录。</div>
-            <div v-for="p in editForm.pausePoints" :key="p.id" class="pause-edit-row">
-              <input class="input pause-time-input" type="datetime-local" step="1" v-model="p.timeValue" />
-              <select class="input pause-select" v-model.number="p.tagId">
+            <div v-if="!editForm.timelinePoints.length" class="muted split-hint">还没有切点，可以添加一个时间点来事后拆分这段记录。</div>
+            <div v-for="p in editForm.timelinePoints" :key="p.id" class="point-edit-row">
+              <input class="input point-time-input" type="datetime-local" step="1" v-model="p.timeValue" />
+              <select class="input point-select" v-model.number="p.tagId">
                 <option v-for="t in tags" :key="t.id" :value="t.id">{{ t.name }}</option>
               </select>
-              <input class="input pause-detail" v-model="p.detail" placeholder="节点文字记录" />
+              <input class="input point-detail" v-model="p.detail" placeholder="节点文字记录" />
             </div>
           </div>
           <div class="edit-ops">
@@ -275,7 +275,7 @@ const effectiveSec = ref(0)
 const fragments = ref(0)
 const tags = ref([])
 const editEntry = ref(null)
-const editForm = ref({ tagId: null, detail: '', startValue: '', endValue: '', pausePoints: [] })
+const editForm = ref({ tagId: null, detail: '', startValue: '', endValue: '', timelinePoints: [] })
 const manualOpen = ref(false)
 const manualForm = ref({ startValue: '', endValue: '', tagId: null, detail: '' })
 const detailMode = ref('collapsed') // collapsed | single | all
@@ -347,7 +347,7 @@ const timelineClips = computed(() => {
     .sort((a, b) => a.start_time - b.start_time)
     .map((s) => {
       const preview = resizePreview.value && resizePreview.value.id === s.id ? resizePreview.value : null
-      const endAt = preview ? preview.endTime : (s.viewEndTime || s.end_time || (s.paused ? s.paused_at : Date.now()))
+      const endAt = preview ? preview.endTime : (s.viewEndTime || s.end_time || Date.now())
       const startAt = preview ? preview.startTime : (s.viewStartTime || s.start_time)
       let lane = lanes.findIndex((laneEnd) => startAt >= laneEnd)
       if (lane < 0) {
@@ -373,7 +373,7 @@ const timelineClips = computed(() => {
 })
 const timelineNodes = computed(() => {
   const start = startOfDay(curDate.value)
-  return segments.value.flatMap((s) => (s.pausePoints || []).map((p) => ({
+  return segments.value.flatMap((s) => (s.timelinePoints || []).map((p) => ({
     ...p,
     entry: s,
     key: `${s.id}-day-node-${p.id}`,
@@ -610,7 +610,7 @@ async function load({ focusWorkStart = false } = {}) {
     tags.value = tagRes.tags || []
     const tagMap = new Map(tags.value.map((t) => [t.id, t]))
     const r = await api('ledger:list', { start, end })
-    const pointsRes = await api('ledger:pausePoints', { start, end }).catch(() => ({ points: [] }))
+    const pointsRes = await api('ledger:timelinePoints', { start, end }).catch(() => ({ points: [] }))
     const eff = await api('report:effectiveHours', { date: curDate.value })
     const raw = (r.entries || []).slice().sort((a, b) => b.start_time - a.start_time)
     const pointsByEntry = new Map()
@@ -624,8 +624,8 @@ async function load({ focusWorkStart = false } = {}) {
       const tag = tagMap.get(e.tag_id) || { name: '未分类', color: '#9D9D9D' }
       e.tagName = tag.name
       e.color = tag.color
-      e.pausePoints = pointsByEntry.get(e.id) || []
-      const actualEnd = e.end_time || (e.paused ? e.paused_at : Date.now())
+      e.timelinePoints = pointsByEntry.get(e.id) || []
+      const actualEnd = e.end_time || Date.now()
       e.actualEndTime = actualEnd
       e.viewStartTime = Math.max(e.start_time, start)
       e.viewEndTime = Math.min(actualEnd, end)
@@ -637,7 +637,7 @@ async function load({ focusWorkStart = false } = {}) {
       e.endText = e.viewEndTime < actualEnd || e.end_time ? formatTime(e.viewEndTime, { seconds: true }) : '…'
       e.actualRangeText = `${formatDate(e.start_time)} ${formatTime(e.start_time, { seconds: true })} – ${e.end_time ? `${formatDate(e.end_time)} ${formatTime(e.end_time, { seconds: true })}` : '进行中'}`
     }
-    // 未完成记录实时刷新；暂停态停在 paused_at，避免视觉上继续跳秒。
+    // 未完成记录实时刷新到当前时间。
     for (const e of raw) {
       decorateEntryTimeline(e, tagMap)
     }
@@ -658,24 +658,24 @@ async function load({ focusWorkStart = false } = {}) {
 
 function decorateEntryTimeline(entry, tagMap) {
   const trackStart = entry.viewStartTime || entry.start_time
-  const trackEnd = entry.viewEndTime || entry.end_time || (entry.paused ? entry.paused_at : Date.now())
+  const trackEnd = entry.viewEndTime || entry.end_time || Date.now()
   const totalMs = Math.max(1, trackEnd - trackStart)
-  const cleanPoints = (entry.pausePoints || [])
+  const cleanPoints = (entry.timelinePoints || [])
     .filter((p) => p.ts > trackStart && p.ts < trackEnd)
     .sort((a, b) => a.ts - b.ts)
 
-  entry.pausePoints = cleanPoints.map((p) => ({
+  entry.timelinePoints = cleanPoints.map((p) => ({
     ...p,
     left: clampPct(((p.ts - trackStart) / totalMs) * 100)
   }))
 
-  const boundaries = [trackStart, ...entry.pausePoints.map((p) => p.ts), trackEnd]
+  const boundaries = [trackStart, ...entry.timelinePoints.map((p) => p.ts), trackEnd]
   entry.timelineSlices = []
   for (let i = 0; i < boundaries.length - 1; i += 1) {
     const sliceStart = boundaries[i]
     const sliceEnd = boundaries[i + 1]
     if (sliceEnd <= sliceStart) continue
-    const fromPoint = i === 0 ? null : entry.pausePoints[i - 1]
+    const fromPoint = i === 0 ? null : entry.timelinePoints[i - 1]
     const sliceTag = tagMap.get(fromPoint?.tag_id) || tagMap.get(entry.tag_id) || { name: '未分类', color: '#9D9D9D' }
     const left = clampPct(((sliceStart - trackStart) / totalMs) * 100)
     const width = Math.max(1.2, clampPct(((sliceEnd - sliceStart) / totalMs) * 100))
@@ -699,9 +699,9 @@ function decorateEntryTimeline(entry, tagMap) {
       shortText: entry.startText.slice(0, 5),
       title: `${entry.startText} · 开始 · ${entry.tagName}`
     },
-    ...entry.pausePoints.map((p) => ({
-      key: `${entry.id}-pause-${p.id}`,
-      type: 'pause',
+    ...entry.timelinePoints.map((p) => ({
+      key: `${entry.id}-point-${p.id}`,
+      type: 'point',
       left: p.left,
       shortText: p.shortText,
       detail: p.detail,
@@ -818,8 +818,8 @@ async function doStop() {
   await api('ledger:complete')
   load()
 }
-async function doPause() {
-  await api('ledger:addPausePoint')
+async function addKeyframe() {
+  await api('ledger:addKeyframe')
   load()
 }
 
@@ -830,7 +830,7 @@ function fillEditForm(s) {
     detail: s.detail || '',
     startValue: toDateTimeInput(s.start_time),
     endValue: s.end_time ? toDateTimeInput(s.end_time) : '',
-    pausePoints: (s.pausePoints || []).map((p) => ({
+    timelinePoints: (s.timelinePoints || []).map((p) => ({
       id: p.id,
       ts: p.ts,
       timeText: p.timeText,
@@ -863,9 +863,9 @@ function closeEdit() {
   expandedEntryId.value = null
   editEntry.value = null
 }
-function addDraftPausePoint() {
+function addDraftTimelinePoint() {
   if (!editEntry.value?.end_time) return
-  const existing = editForm.value.pausePoints
+  const existing = editForm.value.timelinePoints
     .map((p) => fromDateTimeInput(p.timeValue))
     .filter((ts) => ts != null)
   const candidates = [editEntry.value.start_time, ...existing, editEntry.value.end_time].sort((a, b) => a - b)
@@ -881,7 +881,7 @@ function addDraftPausePoint() {
     }
   }
   const ts = bestStart + Math.floor((bestEnd - bestStart) / 2)
-  editForm.value.pausePoints.push({
+  editForm.value.timelinePoints.push({
     id: `new-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     ts,
     timeText: formatTime(ts, { seconds: true }),
@@ -889,7 +889,7 @@ function addDraftPausePoint() {
     tagId: editForm.value.tagId || tags.value[0]?.id || null,
     detail: ''
   })
-  editForm.value.pausePoints.sort((a, b) => fromDateTimeInput(a.timeValue) - fromDateTimeInput(b.timeValue))
+  editForm.value.timelinePoints.sort((a, b) => fromDateTimeInput(a.timeValue) - fromDateTimeInput(b.timeValue))
 }
 
 async function saveEdit() {
@@ -904,7 +904,7 @@ async function saveEdit() {
         await api('ledger:adjustTime', { id: editEntry.value.id, startTime, endTime })
       }
     }
-    if (!editForm.value.pausePoints.length) {
+    if (!editForm.value.timelinePoints.length) {
       const r = await api('ledger:retag', {
         id: editEntry.value.id,
         tagId: editForm.value.tagId,
@@ -913,25 +913,25 @@ async function saveEdit() {
       if (!r.ok) return showAlert(r.error || '保存失败', '保存失败')
     } else {
       const baseTag = editForm.value.tagId
-      const willSplit = editForm.value.pausePoints.some((p) => Number(p.tagId) !== Number(baseTag))
+      const willSplit = editForm.value.timelinePoints.some((p) => Number(p.tagId) !== Number(baseTag))
       let cleanupSameTagPoints = false
       if (willSplit) {
         const ok = await showConfirm('时间节点中存在与当前记录不同的标签。确认后，当前记录将按节点拆分成多条，并自动合并连续相同标签。', { title: '按节点拆分', confirmText: '拆分' })
         if (!ok) return
       } else {
-        const hasNodeDetail = editForm.value.pausePoints.some((p) => p.detail?.trim())
+        const hasNodeDetail = editForm.value.timelinePoints.some((p) => p.detail?.trim())
         const msg = hasNodeDetail
-          ? '暂停点标签和起始标签一致，不需要切分。确认后会合并整个片段并移除暂停点；暂停点文字会追加到片段备注中，避免丢失。是否执行？'
-          : '暂停点标签和起始标签一致，不需要切分。确认后会合并整个片段并移除这些暂停点。是否执行？'
+          ? '切点标签和起始标签一致，不需要切分。确认后会合并整个片段并移除切点；切点文字会追加到片段备注中，避免丢失。是否执行？'
+          : '切点标签和起始标签一致，不需要切分。确认后会合并整个片段并移除这些切点。是否执行？'
         cleanupSameTagPoints = await showConfirm(msg, { title: '合并同标签片段', confirmText: '合并' })
         if (!cleanupSameTagPoints) return
       }
-      const r = await api('ledger:applyPausePointPlan', {
+      const r = await api('ledger:applyTimelinePointPlan', {
         entryId: editEntry.value.id,
         baseTagId: editForm.value.tagId,
         detail,
         cleanupSameTagPoints,
-        points: editForm.value.pausePoints.map((p) => ({
+        points: editForm.value.timelinePoints.map((p) => ({
           id: p.id,
           ts: fromDateTimeInput(p.timeValue),
           tagId: p.tagId,
@@ -940,7 +940,7 @@ async function saveEdit() {
       })
       if (!r.ok) return showAlert(r.error || '保存失败', '保存失败')
       if (r.split) await showAlert('已按时间节点拆分并刷新台账')
-      else if (r.cleaned) await showAlert('已合并片段并清理同标签暂停点')
+      else if (r.cleaned) await showAlert('已合并片段并清理同标签切点')
     }
     expandedEntryId.value = null
     editEntry.value = null
@@ -1101,7 +1101,7 @@ onBeforeUnmount(() => {
 .start-chip { font-size: 12px; }
 .seg-dur { font-size: 13px; font-weight: 500; }
 .frag { font-size: 12px; }
-.pause-chip { font-size: 12px; color: var(--gold); background: rgba(224,188,114,0.12); border: 1px solid rgba(224,188,114,0.28); padding: 1px 7px; border-radius: 999px; }
+.point-chip { font-size: 12px; color: var(--gold); background: rgba(224,188,114,0.12); border: 1px solid rgba(224,188,114,0.28); padding: 1px 7px; border-radius: 999px; }
 .cross-chip { font-size: 12px; color: var(--green); background: rgba(127,169,140,0.12); border: 1px solid rgba(127,169,140,0.28); padding: 1px 7px; border-radius: 999px; }
 .entry-track {
   position: relative;
@@ -1166,8 +1166,8 @@ onBeforeUnmount(() => {
   color: #f1a28f;
   border-color: rgba(241,162,143,.45);
 }
-.pause-summary { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; font-size: 11px; }
-.pause-summary-item { max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.point-summary { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; font-size: 11px; }
+.point-summary-item { max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .seg-detail { margin-top: 4px; font-size: 12px; }
 .empty { text-align: center; padding: 40px 0; }
 .inline-edit { margin-top: 10px; padding: 12px; border-radius: 9px; border: 1px solid color-mix(in srgb, var(--seg-color) 48%, transparent); background: rgba(0,0,0,.10); display: flex; flex-direction: column; gap: 12px; animation: inlineUnfold .28s cubic-bezier(.2,1.2,.35,1) both; }
@@ -1196,16 +1196,16 @@ onBeforeUnmount(() => {
 }
 .edit-tag.active { outline: 2px solid var(--c); }
 .edit-detail { resize: vertical; font-family: inherit; }
-.pause-editor { border-top: 1px solid var(--border); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
-.pause-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.pause-editor h4 { font-size: 13px; font-weight: 500; color: var(--gold); }
+.point-editor { border-top: 1px solid var(--border); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.point-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.point-editor h4 { font-size: 13px; font-weight: 500; color: var(--gold); }
 .btn.small { padding: 4px 9px; font-size: 12px; }
 .split-hint { font-size: 12px; line-height: 1.5; }
-.pause-edit-row { display: flex; align-items: center; gap: 8px; }
-.pause-edit-row .num { width: 62px; color: var(--text-dim); }
-.pause-time-input { width: 210px; font-family: var(--font-mono); }
-.pause-select { width: 130px; }
-.pause-detail { flex: 1; min-width: 160px; }
+.point-edit-row { display: flex; align-items: center; gap: 8px; }
+.point-edit-row .num { width: 62px; color: var(--text-dim); }
+.point-time-input { width: 210px; font-family: var(--font-mono); }
+.point-select { width: 130px; }
+.point-detail { flex: 1; min-width: 160px; }
 .edit-ops { display: flex; justify-content: flex-end; gap: 8px; }
 .manual-mask { position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,.48); display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(8px); }
 .manual-card { width: min(560px, 100%); padding: 18px; }

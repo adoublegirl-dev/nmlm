@@ -11,7 +11,7 @@ const report = require('../src/main/services/report')
 const todos = require('../src/main/services/todos')
 const { startOfDay, endOfDay, formatDuration, dayRange } = require('../src/main/utils/time')
 
-const { entriesRepo, pausePointsRepo, evidenceRepo, activityRepo } = db
+const { entriesRepo, timelinePointsRepo, evidenceRepo, activityRepo } = db
 
 // 每个用例用独立内存库；窗口采集替换为空实现（避免真调 PowerShell 与缓存干扰）
 beforeEach(() => {
@@ -92,7 +92,7 @@ describe('ledger 状态机', () => {
   it('校准时间时阻止已有节点越界', () => {
     const base = 1786300000000
     const entry = entriesRepo.insertFinished({ startTime: base, endTime: base + 3600 * 1000, durationSec: 3600, tagId: 1 })
-    pausePointsRepo.insert({ entryId: entry.id, ts: base + 50 * 60 * 1000, tagId: 1 })
+    timelinePointsRepo.insert({ entryId: entry.id, ts: base + 50 * 60 * 1000, tagId: 1 })
     const r = ledger.adjustTime({ id: entry.id, startTime: base, endTime: base + 40 * 60 * 1000 })
     expect(r.ok).toBe(false)
     expect(r.error).toContain('时间节点')
@@ -121,7 +121,7 @@ describe('ledger 状态机', () => {
       detail: '长段记录',
       isFragment: 0
     })
-    const r = ledger.applyPausePointPlan({
+    const r = ledger.applyTimelinePointPlan({
       entryId: entry.id,
       baseTagId: 1,
       detail: '长段记录',
@@ -136,65 +136,6 @@ describe('ledger 状态机', () => {
     expect(r.entries[1].start_time).toBe(base + 3600 * 1000)
     expect(r.entries[1].end_time).toBe(base + 2 * 3600 * 1000)
     expect(r.entries[1].tag_id).toBe(2)
-  })
-
-  it('pause 不归档旧段，只写暂停点并进入暂停态', async () => {
-    await ledger.start({ tagId: 1 })
-    const r = await ledger.pause()
-    expect(r.ok).toBe(true)
-    const cur = ledger.current()
-    expect(cur.id).toBe(r.entry.id)
-    expect(cur.paused).toBe(true)
-    const all = entriesRepo.listByRange(0, Date.now() + 1000)
-    expect(all.length).toBe(1)
-    expect(all[0].end_time).toBeNull()
-    expect(pausePointsRepo.listByEntry(cur.id).length).toBe(1)
-  })
-
-  it('暂停后同标签继续，沿用原记录且不产生断档', async () => {
-    const base = 1786300000000
-    vi.useFakeTimers()
-    vi.setSystemTime(base)
-    const started = await ledger.start({ tagId: 1 })
-    vi.setSystemTime(base + 10 * 60 * 1000)
-    await ledger.pause()
-    vi.setSystemTime(base + 15 * 60 * 1000)
-    const resumed = await ledger.start({ tagId: 1 })
-    expect(resumed.ok).toBe(true)
-    expect(resumed.entry.id).toBe(started.entry.id)
-    expect(resumed.entry.paused).toBe(false)
-    vi.setSystemTime(base + 30 * 60 * 1000)
-    await ledger.complete({})
-    const rows = entriesRepo.listByRange(base - 1, base + 31 * 60 * 1000)
-    expect(rows.length).toBe(1)
-    expect(rows[0].start_time).toBe(base)
-    expect(rows[0].end_time).toBe(base + 30 * 60 * 1000)
-    expect(rows[0].duration_sec).toBe(1800)
-    expect(pausePointsRepo.listByEntry(rows[0].id).length).toBe(1)
-  })
-
-  it('暂停后换标签继续，从暂停点切新记录且两段连续', async () => {
-    const base = 1786300000000
-    vi.useFakeTimers()
-    vi.setSystemTime(base)
-    const started = await ledger.start({ tagId: 1 })
-    vi.setSystemTime(base + 10 * 60 * 1000)
-    await ledger.pause()
-    vi.setSystemTime(base + 15 * 60 * 1000)
-    const resumed = await ledger.start({ tagId: 2 })
-    expect(resumed.ok).toBe(true)
-    expect(resumed.split).toBe(true)
-    expect(resumed.finished.id).toBe(started.entry.id)
-    vi.setSystemTime(base + 30 * 60 * 1000)
-    await ledger.complete({})
-    const rows = entriesRepo.listByRange(base - 1, base + 31 * 60 * 1000)
-    expect(rows.length).toBe(2)
-    expect(rows[0].tag_id).toBe(1)
-    expect(rows[0].start_time).toBe(base)
-    expect(rows[0].end_time).toBe(base + 10 * 60 * 1000)
-    expect(rows[1].tag_id).toBe(2)
-    expect(rows[1].start_time).toBe(base + 10 * 60 * 1000)
-    expect(rows[1].end_time).toBe(base + 30 * 60 * 1000)
   })
 
   it('recover 归档崩溃残留', () => {
@@ -231,16 +172,16 @@ describe('ledger 状态机', () => {
     expect(ledger.current()).toBeNull()
   })
 
-  it('addPausePoint 给当前任务添加暂停点', async () => {
+  it('addKeyframe 同时创建切点与关键帧', async () => {
     const r = await ledger.switchTask({ tagId: 1 })
-    const p = ledger.addPausePoint({ detail: '被打断' })
+    const p = ledger.addKeyframe({ detail: '补充上下文' })
     expect(p.ok).toBe(true)
-    const points = ledger.listPausePointsByRange(r.entry.start_time - 1, Date.now() + 1000)
+    const points = ledger.listTimelinePointsByRange(r.entry.start_time - 1, Date.now() + 1000)
     expect(points.length).toBe(1)
-    expect(points[0].detail).toBe('被打断')
+    expect(points[0].detail).toBe('补充上下文')
   })
 
-  it('暂停点选择不同标签后拆分记录，并保留连续同标签合并规则', () => {
+  it('切点选择不同标签后拆分记录，并保留连续同标签合并规则', () => {
     const base = 1786300000000
     const entry = entriesRepo.insertFinished({
       startTime: base,
@@ -251,9 +192,9 @@ describe('ledger 状态机', () => {
       windowTitle: null,
       isFragment: 0
     })
-    const p1 = pausePointsRepo.insert({ entryId: entry.id, ts: base + 10 * 60 * 1000 })
-    pausePointsRepo.insert({ entryId: entry.id, ts: base + 20 * 60 * 1000 })
-    const r = ledger.applyPausePointTag({ entryId: entry.id, pointId: p1.id, tagId: 2 })
+    const p1 = timelinePointsRepo.insert({ entryId: entry.id, ts: base + 10 * 60 * 1000 })
+    timelinePointsRepo.insert({ entryId: entry.id, ts: base + 20 * 60 * 1000 })
+    const r = ledger.applyTimelinePointTag({ entryId: entry.id, pointId: p1.id, tagId: 2 })
     expect(r.ok).toBe(true)
     expect(r.split).toBe(true)
     const rows = entriesRepo.listByRange(base - 1, base + 31 * 60 * 1000)
@@ -261,7 +202,7 @@ describe('ledger 状态机', () => {
     expect(rows.map((x) => x.duration_sec)).toEqual([600, 600, 600])
   })
 
-  it('暂停点选择同标签时只保存文字记录，不拆分不消费暂停点', () => {
+  it('切点选择同标签时只保存文字记录，不拆分不消费切点', () => {
     const base = 1786300000000
     const entry = entriesRepo.insertFinished({
       startTime: base,
@@ -272,19 +213,19 @@ describe('ledger 状态机', () => {
       windowTitle: null,
       isFragment: 0
     })
-    const p1 = pausePointsRepo.insert({ entryId: entry.id, ts: base + 10 * 60 * 1000 })
-    const r = ledger.applyPausePointPlan({ entryId: entry.id, points: [{ id: p1.id, tagId: 1, detail: '接了个电话' }] })
+    const p1 = timelinePointsRepo.insert({ entryId: entry.id, ts: base + 10 * 60 * 1000 })
+    const r = ledger.applyTimelinePointPlan({ entryId: entry.id, points: [{ id: p1.id, tagId: 1, detail: '接了个电话' }] })
     expect(r.ok).toBe(true)
     expect(r.split).toBe(false)
     const rows = entriesRepo.listByRange(base - 1, base + 31 * 60 * 1000)
     expect(rows.length).toBe(1)
     expect(rows[0].duration_sec).toBe(1800)
-    const points = pausePointsRepo.listByEntry(entry.id)
+    const points = timelinePointsRepo.listByEntry(entry.id)
     expect(points.length).toBe(1)
     expect(points[0].detail).toBe('接了个电话')
   })
 
-  it('同标签暂停点确认合并时会清理暂停点并保留文字记录', () => {
+  it('同标签切点确认合并时会清理切点并保留文字记录', () => {
     const base = 1786300000000
     const entry = entriesRepo.insertFinished({
       startTime: base,
@@ -295,8 +236,8 @@ describe('ledger 状态机', () => {
       windowTitle: null,
       isFragment: 0
     })
-    const p1 = pausePointsRepo.insert({ entryId: entry.id, ts: base + 10 * 60 * 1000 })
-    const r = ledger.applyPausePointPlan({
+    const p1 = timelinePointsRepo.insert({ entryId: entry.id, ts: base + 10 * 60 * 1000 })
+    const r = ledger.applyTimelinePointPlan({
       entryId: entry.id,
       baseTagId: 1,
       detail: '长任务',
@@ -305,7 +246,7 @@ describe('ledger 状态机', () => {
     })
     expect(r.ok).toBe(true)
     expect(r.cleaned).toBe(true)
-    expect(pausePointsRepo.listByEntry(entry.id).length).toBe(0)
+    expect(timelinePointsRepo.listByEntry(entry.id).length).toBe(0)
     const updated = entriesRepo.get(entry.id)
     expect(updated.detail).toContain('长任务')
     expect(updated.detail).toContain('时间节点记录')
@@ -323,8 +264,8 @@ describe('ledger 状态机', () => {
       windowTitle: null,
       isFragment: 0
     })
-    const p1 = pausePointsRepo.insert({ entryId: entry.id, ts: base + 10 * 60 * 1000 })
-    const split = ledger.applyPausePointPlan({ entryId: entry.id, baseTagId: 1, points: [{ id: p1.id, tagId: 2, detail: '切到开会' }] })
+    const p1 = timelinePointsRepo.insert({ entryId: entry.id, ts: base + 10 * 60 * 1000 })
+    const split = ledger.applyTimelinePointPlan({ entryId: entry.id, baseTagId: 1, points: [{ id: p1.id, tagId: 2, detail: '切到开会' }] })
     expect(split.ok).toBe(true)
     let rows = entriesRepo.listByRange(base - 1, base + 31 * 60 * 1000)
     expect(rows.length).toBe(2)
@@ -337,13 +278,13 @@ describe('ledger 状态机', () => {
     expect(rows[0].tag_id).toBe(1)
   })
 
-  it('进行中记录可按暂停点拆分，最后一段保持进行中', () => {
+  it('进行中记录可按切点拆分，最后一段保持进行中', () => {
     const base = 1786300000000
     vi.useFakeTimers()
     vi.setSystemTime(base + 30 * 60 * 1000)
     const entry = entriesRepo.insert({ startTime: base, tagId: 1 })
-    const p1 = pausePointsRepo.insert({ entryId: entry.id, ts: base + 10 * 60 * 1000 })
-    const r = ledger.applyPausePointPlan({ entryId: entry.id, baseTagId: 1, points: [{ id: p1.id, tagId: 2, detail: '切到开会' }] })
+    const p1 = timelinePointsRepo.insert({ entryId: entry.id, ts: base + 10 * 60 * 1000 })
+    const r = ledger.applyTimelinePointPlan({ entryId: entry.id, baseTagId: 1, points: [{ id: p1.id, tagId: 2, detail: '切到开会' }] })
     expect(r.ok).toBe(true)
     expect(r.split).toBe(true)
     const rows = entriesRepo.listByRange(base - 1, base + 31 * 60 * 1000)
@@ -355,7 +296,7 @@ describe('ledger 状态机', () => {
     expect(rows[1].start_time).toBe(base + 10 * 60 * 1000)
     expect(rows[1].end_time).toBeNull()
     expect(ledger.current().id).toBe(rows[1].id)
-    expect(pausePointsRepo.listByEntry(entry.id).length).toBe(0)
+    expect(timelinePointsRepo.listByEntry(entry.id).length).toBe(0)
   })
 })
 

@@ -13,28 +13,22 @@ let latestRecorderMessage = null
 let recorderMessageTimer = null
 
 const RECORDER_WIDTH = 280
-const RECORDER_HEIGHT = 346
+const RECORDER_HEIGHT = 390
 const RECORDER_COLLAPSED_WIDTH = 280
 const RECORDER_MESSAGE_WIDTH = RECORDER_COLLAPSED_WIDTH
-const RECORDER_COLLAPSED_HEIGHT = 200
-
-function clampNumber(value, min, max, fallback) {
-  const n = Number(value)
-  if (!Number.isFinite(n)) return fallback
-  return Math.round(Math.min(max, Math.max(min, n)))
-}
+const RECORDER_COLLAPSED_HEIGHT = 168
 
 function recorderLayout() {
-  const recorder = settings.get('recorder') || {}
-  const expandedWidth = clampNumber(recorder.expandedWidth, 240, 420, RECORDER_WIDTH)
-  const expandedHeight = clampNumber(recorder.expandedHeight, 260, 520, RECORDER_HEIGHT)
-  const displayMode = recorder.displayMode === 'capsule' ? 'capsule' : 'panel'
-  const panelWidth = clampNumber(recorder.collapsedPanelWidth, 240, 420, RECORDER_COLLAPSED_WIDTH)
-  const panelHeight = clampNumber(recorder.collapsedPanelHeight, 140, 360, RECORDER_COLLAPSED_HEIGHT)
-  const capsuleWidth = clampNumber(recorder.collapsedCapsuleWidth, 96, 220, 136)
-  const capsuleHeight = clampNumber(recorder.collapsedCapsuleHeight, 40, 80, 54)
-  const collapsedWidth = displayMode === 'capsule' ? capsuleWidth : panelWidth
-  const collapsedHeight = displayMode === 'capsule' ? capsuleHeight : panelHeight
+  // 记录器按当前设计稿固定尺寸；历史配置中的尺寸字段不再生效。
+  const expandedWidth = RECORDER_WIDTH
+  const expandedHeight = RECORDER_HEIGHT
+  const displayMode = 'panel'
+  const panelWidth = RECORDER_COLLAPSED_WIDTH
+  const panelHeight = RECORDER_COLLAPSED_HEIGHT
+  const capsuleWidth = panelWidth
+  const capsuleHeight = panelHeight
+  const collapsedWidth = panelWidth
+  const collapsedHeight = panelHeight
   return { expandedWidth, expandedHeight, displayMode, panelWidth, panelHeight, capsuleWidth, capsuleHeight, collapsedWidth, collapsedHeight }
 }
 const DIST_URL = () => `http://127.0.0.1:${require('./services/settings').get('server.port')}`
@@ -90,7 +84,8 @@ function createRecorder() {
     resizable: false,
     maximizable: false,
     fullscreenable: false,
-    hasShadow: false,
+    // CSS 阴影会被透明 BrowserWindow 的矩形边界裁切；保留原生窗口阴影作为桌面端兜底。
+    hasShadow: true,
     icon: APP_ICON,
     focusable: true,
     webPreferences: {
@@ -123,7 +118,8 @@ function showRecorder() {
   if (!recorderWin || recorderWin.isDestroyed()) createRecorder()
   if (!recorderWin) return
   settings.set('recorder.hiddenToTray', false)
-  setRecorderCollapsed(false)
+  const hasActiveRecord = !!require('./services/ledger').current()
+  setRecorderCollapsed(hasActiveRecord)
   recorderWin.show()
   recorderWin.focus()
 }
@@ -146,25 +142,11 @@ function setRecorderMenuOpen(open) {
   return { ok: true, open }
 }
 
-function roundedCapsuleShape(width, height) {
-  const r = Math.floor(height / 2)
-  const rects = []
-  for (let y = 0; y < height; y++) {
-    const dy = Math.abs(y + 0.5 - r)
-    let inset = 0
-    if (dy > 0) {
-      const x = Math.sqrt(Math.max(0, r * r - dy * dy))
-      inset = Math.max(0, Math.ceil(r - x))
-    }
-    rects.push({ x: inset, y, width: width - inset * 2, height: 1 })
-  }
-  return rects
-}
-
 function applyRecorderShape(collapsed, width, height) {
   if (!recorderWin || typeof recorderWin.setShape !== 'function') return
   try {
-    // 胶囊使用 CSS border-radius + 透明窗口渲染，避免 Windows setShape 按像素行裁切造成两侧锯齿/像素块。
+    // Chromium 的 CSS clip-path 会按显示器缩放抗锯齿；不要用逐像素 setShape，
+    // 否则 2K 屏在 Windows 缩放下会让 8px 圆弧出现阶梯和断续边线。
     recorderWin.setShape([])
   } catch (_) {
     // setShape 在部分 Electron/Windows 组合上可能不可用，失败时退回透明窗口。
@@ -274,6 +256,46 @@ function createTagPicker(entryId) {
   return tagPickerWin
 }
 
+function createSegmentTagPicker({ entryId, target = 'base', pointId = null, x, y } = {}) {
+  if (tagPickerWin) tagPickerWin.close()
+  const width = 220
+  const height = 212
+  const pointer = { x: Number(x) || 0, y: Number(y) || 0 }
+  const display = screen.getDisplayNearestPoint(pointer)
+  const { workArea } = display
+  const px = Math.min(Math.max(Math.round(pointer.x - width / 2), workArea.x), workArea.x + workArea.width - width)
+  const below = Math.round(pointer.y + 8)
+  const py = below + height <= workArea.y + workArea.height
+    ? below
+    : Math.max(workArea.y, Math.round(pointer.y - height - 8))
+  tagPickerWin = new BrowserWindow({
+    width,
+    height,
+    x: px,
+    y: py,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    hasShadow: true,
+    icon: APP_ICON,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  })
+  const query = new URLSearchParams({ mode: 'segment', entryId: String(entryId), target, pointId: pointId == null ? '' : String(pointId) })
+  tagPickerWin.loadURL(`${DIST_URL()}/tagpicker.html?${query.toString()}`)
+  tagPickerWin.on('blur', () => closeTagPicker())
+  tagPickerWin.on('closed', () => {
+    tagPickerWin = null
+    if (recorderWin && !recorderWin.isDestroyed()) recorderWin.webContents.send(EVENTS.SEGMENT_TAG_PICKER_CLOSED)
+  })
+  return tagPickerWin
+}
+
 function closeTagPicker() {
   if (tagPickerWin) tagPickerWin.close()
 }
@@ -321,6 +343,7 @@ module.exports = {
   isMiniVisible,
   setMiniPos,
   createTagPicker,
+  createSegmentTagPicker,
   closeTagPicker,
   createReminder
 }

@@ -40,8 +40,8 @@ function broadcast(event, payload) {
 function wireServiceEmitters() {
   ledger.attachEventSender((data) => {
     broadcast(EVENTS.LEDGER_STATE_CHANGED, data)
-    const map = { recording: '已开始', paused: '留一个断点', completed: '已存档', idle: '已静默' }
-    if (map[data?.state]) windows.showRecorderMessage({ type: data.state === 'paused' ? 'info' : 'success', text: map[data.state], duration: 1800 })
+    const map = { recording: '已开始', keyframe: '已打关键帧', completed: '已存档', idle: '已静默' }
+    if (map[data?.state]) windows.showRecorderMessage({ type: data.state === 'keyframe' ? 'info' : 'success', text: map[data.state], duration: 1800 })
   })
   evidence.attachEventSender((event, payload) => {
     broadcast(event, payload)
@@ -62,11 +62,11 @@ function registerAll() {
   registerHandler(IPC.LEDGER_STOP, (a) => ledger.stop(a))
   registerHandler(IPC.LEDGER_SWITCH_TASK, (a) => ledger.switchTask(a))
   registerHandler(IPC.LEDGER_COMPLETE, (a) => ledger.complete(a))
-  registerHandler(IPC.LEDGER_ADD_PAUSE_POINT, (a) => ledger.addPausePoint(a))
-  registerHandler(IPC.LEDGER_APPLY_PAUSE_POINT_TAG, (a) => ledger.applyPausePointTag(a))
-  registerHandler(IPC.LEDGER_APPLY_PAUSE_POINT_PLAN, (a) => ledger.applyPausePointPlan(a))
-  registerHandler(IPC.LEDGER_PAUSE_POINTS, (a) => ({ ok: true, points: ledger.listPausePointsByRange(a.start, a.end) }))
-  registerHandler(IPC.LEDGER_PAUSE, () => ledger.pause())
+  registerHandler(IPC.LEDGER_ADD_KEYFRAME, (a) => ledger.addKeyframe(a))
+  registerHandler(IPC.LEDGER_APPLY_TIMELINE_POINT_TAG, (a) => ledger.applyTimelinePointTag(a))
+  registerHandler(IPC.LEDGER_APPLY_TIMELINE_POINT_PLAN, (a) => ledger.applyTimelinePointPlan(a))
+  registerHandler(IPC.LEDGER_TIMELINE_POINTS, (a) => ({ ok: true, points: ledger.listTimelinePointsByRange(a.start, a.end) }))
+  registerHandler(IPC.LEDGER_TIMELINE_MARKERS, (a) => ({ ok: true, markers: ledger.listTimelineMarkersByRange(a.start, a.end) }))
   registerHandler(IPC.LEDGER_CURRENT, () => ({ ok: true, entry: ledger.current() }))
   registerHandler(IPC.LEDGER_LIST, (a) => {
     const entries = ledger.listByRange(a.start, a.end)
@@ -175,9 +175,10 @@ function registerAll() {
     const s = settings.getAll()
     return { ok: true, port: s.server.port, token: s.server.token, urls: s.server.urls, userData: app.getPath('userData'), version: app.getVersion(), isPackaged: app.isPackaged }
   })
-  registerHandler(IPC.SERVER_OPEN_BROWSER, () => {
+  registerHandler(IPC.SERVER_OPEN_BROWSER, (a = {}) => {
     const s = settings.getAll()
-    shell.openExternal(`http://127.0.0.1:${s.server.port}`)
+    const route = ['ledger', 'evidence', 'report', 'tools', 'todos', 'settings', 'system'].includes(a.route) ? `#${a.route}` : ''
+    shell.openExternal(`http://127.0.0.1:${s.server.port}/panel.html${route}`)
     return { ok: true }
   })
   registerHandler(IPC.SERVER_MCP_CONFIG, () => require('./services/mcpConfig').getMcpConfig())
@@ -213,6 +214,21 @@ function registerAll() {
   })
   registerHandler(IPC.TAGPICKER_CONFIRM, (a) => {
     const r = ledger.retag(Number(a.entryId), a)
+    if (r.ok) windows.closeTagPicker()
+    return r
+  })
+  registerHandler(IPC.TAGPICKER_OPEN_SEGMENT, (a) => {
+    windows.createSegmentTagPicker(a)
+    return { ok: true }
+  })
+  registerHandler(IPC.TAGPICKER_CONFIRM_SEGMENT, (a) => {
+    const r = a.target === 'point'
+      ? ledger.applyTimelinePointTag({
+          entryId: Number(a.entryId),
+          pointId: Number(a.pointId),
+          tagId: Number(a.tagId)
+        })
+      : ledger.retag(Number(a.entryId), { tagId: Number(a.tagId) })
     if (r.ok) windows.closeTagPicker()
     return r
   })

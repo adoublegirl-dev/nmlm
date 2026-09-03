@@ -8,11 +8,11 @@ const IPC = {
   LEDGER_STOP: 'ledger:stop',
   LEDGER_SWITCH_TASK: 'ledger:switchTask',
   LEDGER_COMPLETE: 'ledger:complete',
-  LEDGER_ADD_PAUSE_POINT: 'ledger:addPausePoint',
-  LEDGER_APPLY_PAUSE_POINT_TAG: 'ledger:applyPausePointTag',
-  LEDGER_APPLY_PAUSE_POINT_PLAN: 'ledger:applyPausePointPlan',
-  LEDGER_PAUSE_POINTS: 'ledger:pausePoints',
-  LEDGER_PAUSE: 'ledger:pause',
+  LEDGER_ADD_KEYFRAME: 'ledger:addKeyframe',
+  LEDGER_APPLY_TIMELINE_POINT_TAG: 'ledger:applyTimelinePointTag',
+  LEDGER_APPLY_TIMELINE_POINT_PLAN: 'ledger:applyTimelinePointPlan',
+  LEDGER_TIMELINE_POINTS: 'ledger:timelinePoints',
+  LEDGER_TIMELINE_MARKERS: 'ledger:timelineMarkers',
   LEDGER_CURRENT: 'ledger:current',
   LEDGER_LIST: 'ledger:list',
   LEDGER_RECOVER: 'ledger:recover',
@@ -104,7 +104,9 @@ const IPC = {
   MINI_SET_POS: 'mini:setPos',
   // tagpicker
   TAGPICKER_CANCEL: 'tagpicker:cancel',
-  TAGPICKER_CONFIRM: 'tagpicker:confirm'
+  TAGPICKER_CONFIRM: 'tagpicker:confirm',
+  TAGPICKER_OPEN_SEGMENT: 'tagpicker:openSegment',
+  TAGPICKER_CONFIRM_SEGMENT: 'tagpicker:confirmSegment'
 }
 
 // ---------- main → renderer 推送事件 ----------
@@ -114,6 +116,7 @@ const EVENTS = {
   CAPTURE_DONE: 'capture:done',
   PACK_DONE: 'pack:done',
   SETTINGS_CHANGED: 'settings:changed',
+  SEGMENT_TAG_PICKER_CLOSED: 'tagpicker:segment-closed',
   SHORTCUT_CONFLICT: 'shortcut:conflict',
   ACTIVITY_SNAPSHOT: 'activity:snapshot',
   TODO_CHANGED: 'todo:changed',
@@ -174,13 +177,7 @@ const DEFAULT_SETTINGS = {
     position: { x: null, y: null }, // null = 右下角默认
     hiddenToTray: false,
     displayMode: 'capsule', // panel = 设计稿小面板；capsule = 胶囊收起形态
-    capsuleSkin: 'horse', // horse = 奔马胶囊；classic = 经典信息胶囊
-    expandedWidth: 280,
-    expandedHeight: 390,
-    collapsedPanelWidth: 280,
-    collapsedPanelHeight: 200,
-    collapsedCapsuleWidth: 136,
-    collapsedCapsuleHeight: 54
+    capsuleSkin: 'horse' // horse = 奔马胶囊；classic = 经典信息胶囊
   },
   mini: {
     enabled: false, // legacy，仅用于兼容旧配置

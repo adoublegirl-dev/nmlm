@@ -47,15 +47,6 @@
             <label class="switch"><input type="checkbox" :checked="recorder.enabled" @change="setRecorder('enabled', $event.target.checked)" /><i></i></label>
           </div>
           <div class="sub-card">
-            <div class="sub-title">记录器显示</div>
-            <div class="form-grid">
-              <label>展开宽度<input class="input" type="number" min="240" max="420" :value="recorder.expandedWidth || 280" @change="setRecorderNumber('expandedWidth', $event.target.value, 280)" /></label>
-              <label>展开高度<input class="input" type="number" min="260" max="520" :value="recorder.expandedHeight || 390" @change="setRecorderNumber('expandedHeight', $event.target.value, 390)" /></label>
-            </div>
-            <div class="muted hint">展开态默认按设计稿；收起态暂时固定为奔马胶囊，后续等皮肤方案稳定后再开放切换。</div>
-            <button class="btn mini" @click="resetRecorderLayout">恢复默认尺寸</button>
-          </div>
-          <div class="sub-card">
             <div class="sub-title">快捷键</div>
             <div v-for="(acc, name) in shortcuts" :key="name" class="compact-row">
               <span>{{ labelOf(name) }}</span><code>{{ acc || '未启用' }}</code>
@@ -71,14 +62,14 @@
               <span class="tag-name">{{ t.name }}</span>
               <input type="color" :value="t.color" @change="setTagColor(t, $event.target.value)" />
               <input class="input mini-input" type="number" min="0" max="9" :value="t.shortcut_key ?? ''" @change="setTagKey(t, $event)" />
-              <label class="break-label"><input type="checkbox" :checked="!!t.is_break" @change="setTagBreak(t, $event.target.checked)" /> 暂停/离开</label>
+              <label class="break-label"><input type="checkbox" :checked="!!t.is_break" @change="setTagBreak(t, $event.target.checked)" /> 离开</label>
               <button class="btn mini danger" @click="deleteTag(t)">删除</button>
             </div>
             <div class="add-tag">
               <input v-model="newTag.name" class="input" placeholder="新标签名" @keyup.enter="addTag" />
               <input type="color" v-model="newTag.color" />
               <input class="input mini-input" type="number" min="0" max="9" v-model.number="newTag.key" placeholder="数字键" />
-              <label class="break-label"><input type="checkbox" v-model="newTag.isBreak" /> 暂停/离开</label>
+              <label class="break-label"><input type="checkbox" v-model="newTag.isBreak" /> 离开</label>
               <button class="btn primary" @click="addTag">添加</button>
             </div>
           </div>
@@ -186,7 +177,7 @@ const recordingKey = ref(null)
 const recordingName = ref('')
 
 const maskedToken = computed(() => token.value ? token.value.slice(0, 6) + '••••' : '…')
-const LABELS = { start: '开始/暂停记录', stop: '停止记录', screenshot: '快捷截图', pack: '打包证据链', openPanel: '打开面板' }
+const LABELS = { start: '开始记录 / 打关键帧', stop: '停止记录', screenshot: '快捷截图', pack: '打包证据链', openPanel: '打开面板' }
 function labelOf(name) { return LABELS[name] || name }
 function parseList(value) { return String(value || '').split(/[\n,，]/).map((x) => x.trim()).filter(Boolean) }
 function listText(key) { return (privacy.value[key] || []).join('\n') }
@@ -219,23 +210,6 @@ async function setPrivacy(key, val) { await api('settings:set', { key: `privacy.
 async function setPrivacyList(key, val) { await setPrivacy(key, parseList(val)) }
 async function setModel(key, val) { await api('settings:set', { key: `model.${key}`, value: val }); model.value[key] = val }
 async function setRecorder(key, val) { await api('settings:set', { key: `recorder.${key}`, value: val }); recorder.value[key] = val }
-async function setRecorderNumber(key, val, fallback) {
-  const n = Math.round(Number(val))
-  await setRecorder(key, Number.isFinite(n) ? n : fallback)
-}
-async function resetRecorderLayout() {
-  const defaults = {
-    displayMode: 'capsule',
-    capsuleSkin: 'horse',
-    expandedWidth: 280,
-    expandedHeight: 390,
-    collapsedPanelWidth: 280,
-    collapsedPanelHeight: 200,
-    collapsedCapsuleWidth: 136,
-    collapsedCapsuleHeight: 54
-  }
-  for (const [key, value] of Object.entries(defaults)) await setRecorder(key, value)
-}
 
 async function resetToken() {
   const ok = await showConfirm('重置后旧的局域网/Agent 访问令牌会失效，是否继续？', { title: '重置访问令牌', confirmText: '重置' })

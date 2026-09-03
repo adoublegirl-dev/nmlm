@@ -38,7 +38,7 @@
       </div>
 
       <div class="shortcut-note">
-        默认快捷键：F8 开始/暂停，F9 停止，F10 截图。可在设置页修改并检测冲突。
+        默认快捷键：F8 开始记录 / 打关键帧，F9 停止，F10 截图。可在设置页修改并检测冲突。
       </div>
 
       <div class="setup-actions">

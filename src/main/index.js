@@ -175,7 +175,8 @@ function buildActions() {
   return {
     openRecorder: () => windows.showRecorder(),
     hideRecorder: () => windows.hideRecorder(true),
-    toggleRecord: () => onStartShortcut(),
+    primaryRecordAction: () => onStartShortcut(),
+    stopRecord: () => onStopShortcut(),
     screenshot: () => evidence.capture(),
     pack: () => {
       const { BrowserWindow, Notification } = require('electron')
@@ -204,16 +205,9 @@ async function onStartShortcut() {
     return { ok: false, error: '没有可用标签' }
   }
   const current = ledger.current()
-  if (current && current.paused) {
-    const r = await ledger.start({ tagId: tag.id })
-    console.log(`[niuma] resume result: ok=${r.ok}${r.entry ? ` id=${r.entry.id}` : ''}${r.error ? ` error=${r.error}` : ''}`)
-    if (r.ok) tray.setState('recording')
-    return r
-  }
   if (current) {
-    const r = await ledger.pause({})
-    console.log(`[niuma] pause result: ok=${r.ok}${r.entry ? ` id=${r.entry.id}` : ''}${r.error ? ` error=${r.error}` : ''}`)
-    if (r.ok) tray.setState('idle')
+    const r = ledger.addKeyframe({})
+    console.log(`[niuma] keyframe result: ok=${r.ok}${r.entry ? ` id=${r.entry.id}` : ''}${r.error ? ` error=${r.error}` : ''}`)
     return r
   }
   const r = await ledger.start({ tagId: tag.id })

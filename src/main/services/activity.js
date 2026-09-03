@@ -1,6 +1,6 @@
 // 活动采集：轮询当前窗口，写 activity_log，并广播快照给记录器。
 // 设计原则：activity_log 是原始传感器流水，不因台账编辑而物理拆分；展示/建议/转换时做虚拟裁剪。
-const { activityRepo, entriesRepo, pausePointsRepo, tagsRepo, getDb } = require('../db')
+const { activityRepo, entriesRepo, timelinePointsRepo, tagsRepo, getDb } = require('../db')
 const { getActiveWindow } = require('../utils/window')
 const { EVENTS } = require('../../shared/constants')
 const settings = require('./settings')
@@ -274,9 +274,9 @@ function applyIdleBreak({ entryId, start, end, detail = null } = {}) {
   if (innerEnd <= innerStart || innerStart <= entry.start_time || innerEnd >= entry.end_time) return { ok: false, error: '轨迹需要位于记录片段内部' }
   const breakTagId = findBreakTagId()
   const note = detail || '活动轨迹显示这段可能离开电脑'
-  const p1 = pausePointsRepo.insert({ entryId: entry.id, ts: innerStart, tagId: breakTagId, detail: note })
-  const p2 = pausePointsRepo.insert({ entryId: entry.id, ts: innerEnd, tagId: entry.tag_id, detail: '根据活动轨迹恢复原标签' })
-  return ledger.applyPausePointPlan({
+  const p1 = timelinePointsRepo.insert({ entryId: entry.id, ts: innerStart, tagId: breakTagId, detail: note })
+  const p2 = timelinePointsRepo.insert({ entryId: entry.id, ts: innerEnd, tagId: entry.tag_id, detail: '根据活动轨迹恢复原标签' })
+  return ledger.applyTimelinePointPlan({
     entryId: entry.id,
     baseTagId: entry.tag_id,
     detail: entry.detail,

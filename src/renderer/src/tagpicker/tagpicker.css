@@ -37,3 +37,21 @@ body { margin: 0; }
 }
 .tp-input { font-size: 13px; }
 .tp-foot { font-size: 11px; }
+
+.tp-segment {
+  height: 212px;
+  padding: 12px;
+  gap: 12px;
+  border: 1px solid #ccb587;
+  border-radius: 8px;
+  background: #faf7ec;
+  box-shadow: 0 12px 28px rgba(55, 35, 19, .22);
+  color: #925017;
+}
+.tp-segment .tp-title { height: 20px; line-height: 20px; padding: 0 8px; color: #ac9370; font-size: 14px; font-weight: 400; }
+.tp-segment .tp-tags { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 4px; overflow-y: auto; }
+.tp-segment .tp-tags::-webkit-scrollbar { width: 8px; }
+.tp-segment .tp-tags::-webkit-scrollbar-thumb { border: 2px solid #faf7ec; border-radius: 999px; background: rgba(146, 80, 23, .42); }
+.tp-segment .tp-tag { width: 100%; min-height: 28px; flex: 0 0 28px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: #925017; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; font-size: 13px; }
+.tp-segment .tp-tag:hover, .tp-segment .tp-tag:focus-visible { outline: none; background: #e6dec3; }
+.tp-tag-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
