@@ -1,8 +1,29 @@
 // 主进程入口：生命周期、单实例、服务装配。
 const { app, shell, dialog } = require('electron')
 const path = require('path')
+const fs = require('fs')
 const crypto = require('crypto')
 const { IPC } = require('../shared/constants')
+
+function reportBackgroundError(kind, error) {
+  const detail = error?.stack || error?.message || String(error)
+  console.error(`[niuma] ${kind}:`, detail)
+  try {
+    const file = path.join(app.getPath('userData'), 'startup-errors.log')
+    fs.appendFileSync(file, `${new Date().toISOString()} [${kind}] ${detail}\n`)
+  } catch (_) {}
+}
+
+// 后台提醒、活动采集等辅助任务不能因未处理 Promise 终止托盘应用。
+process.on('unhandledRejection', (error) => reportBackgroundError('unhandledRejection', error))
+process.on('uncaughtException', (error) => reportBackgroundError('uncaughtException', error))
+
+// 记录器的透明悬浮窗不依赖 GPU。部分 Windows 环境的 GPU 子进程加载失败会让 Electron
+// 在连续重启后直接退出；在 ready 之前禁用硬件加速，并避免启动独立 GPU 子进程。
+app.disableHardwareAcceleration()
+app.commandLine.appendSwitch('disable-gpu')
+app.commandLine.appendSwitch('disable-gpu-compositing')
+app.commandLine.appendSwitch('in-process-gpu')
 
 let server = null
 
@@ -245,8 +266,9 @@ function syncMiniState(entry) {
   tray.setState(entry ? 'recording' : 'idle')
 }
 
-app.on('window-all-closed', () => {
-  // 托盘应用：不退出
+app.on('window-all-closed', (event) => {
+  // 托盘应用：关闭最后一个窗口时必须阻止 Windows 默认退出行为。
+  event.preventDefault()
 })
 
 app.on('before-quit', () => {

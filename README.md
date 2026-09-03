@@ -66,7 +66,7 @@ npm run dev         # 自动切到 Electron ABI 并启动应用
 | `npm run dev:utf8` | UTF-8 安全启动应用，Windows 中文日志不乱码 |
 | `npm test` | 单元测试（自动切 Node ABI） |
 | `npm run build:renderer` | 构建渲染层到 dist/ |
-| `npm run dist` | electron-builder 打包便携 exe（发布用） |
+| `npm run dist` | electron-builder 打包 Windows 安装程序（发布用） |
 | `npm run mcp` | 启动 MCP 待办工具服务（需桌面服务正在运行） |
 | `npm run mcp:utf8` | UTF-8 安全启动 MCP 服务 |
 | `npm run junction` | 创建 `C:\nmlm` 无中文路径入口 |

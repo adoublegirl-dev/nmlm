@@ -10,9 +10,12 @@ files:
   - src/shared/**
   - package.json
 asar: true
+# better-sqlite3 是原生 .node 模块，不能留在 app.asar 内，否则安装版会在启动时加载失败。
+asarUnpack:
+  - node_modules/better-sqlite3/**
 win:
   target:
-    - portable
+    - nsis
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

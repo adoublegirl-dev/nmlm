@@ -84,9 +84,11 @@ async function tick() {
 
 function start() {
   if (timer) return
-  tick()
+  // 活动采集是后台辅助能力；单次采集失败不能让未处理的 Promise 终止整个桌面应用。
+  const safelyTick = () => tick().catch((error) => console.warn('[activity] 采集失败：', error?.message || error))
+  safelyTick()
   const sec = Math.max(10, settings.get('activity.pollIntervalSec') || 30)
-  timer = setInterval(tick, sec * 1000)
+  timer = setInterval(safelyTick, sec * 1000)
 }
 
 function stop() {
