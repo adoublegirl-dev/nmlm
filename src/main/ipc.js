@@ -147,12 +147,15 @@ function registerAll() {
       const name = String(a.key).slice('shortcuts.'.length)
       return shortcut.updateShortcut(name, a.value)
     }
+    if (a.key === 'recorder.collapsedMode' && !['mini', 'capsule'].includes(a.value)) {
+      return { ok: false, error: '记录器收起形态无效' }
+    }
     const value = settings.set(a.key, a.value)
     if (a.key === 'recorder.enabled' || a.key === 'mini.enabled') {
       if (value) windows.showRecorder()
       else windows.hideRecorder(true)
     }
-    if (String(a.key || '').startsWith('recorder.') && a.key !== 'recorder.enabled' && a.key !== 'recorder.hiddenToTray') {
+    if (String(a.key || '').startsWith('recorder.') && !['recorder.enabled', 'recorder.hiddenToTray', 'recorder.collapsedMode'].includes(a.key)) {
       windows.refreshRecorderLayout()
     }
     return { ok: true, value }

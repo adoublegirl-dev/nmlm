@@ -176,8 +176,9 @@ const DEFAULT_SETTINGS = {
     selectedTagId: null,
     position: { x: null, y: null }, // null = 右下角默认
     hiddenToTray: false,
-    displayMode: 'capsule', // panel = 设计稿小面板；capsule = 胶囊收起形态
-    capsuleSkin: 'horse' // horse = 奔马胶囊；classic = 经典信息胶囊
+    collapsedMode: 'mini', // mini = 小窗口收起形态；capsule = 吃草视频胶囊。首次安装默认 mini，升级沿用用户已保存值。
+    displayMode: 'capsule', // legacy：旧版收起形态字段，仅保留兼容，不再作为当前模式来源
+    capsuleSkin: 'horse' // legacy：旧版胶囊皮肤字段
   },
   mini: {
     enabled: false, // legacy，仅用于兼容旧配置

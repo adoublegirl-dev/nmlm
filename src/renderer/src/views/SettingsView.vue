@@ -47,6 +47,22 @@
             <label class="switch"><input type="checkbox" :checked="recorder.enabled" @change="setRecorder('enabled', $event.target.checked)" /><i></i></label>
           </div>
           <div class="sub-card">
+            <div class="sub-title">收起形态</div>
+            <div class="recorder-mode-grid">
+              <button type="button" class="recorder-mode-option" :class="{ active: (recorder.collapsedMode || 'mini') === 'mini' }" @click="changeCollapsedMode('mini')">
+                <b>小窗口模式</b>
+                <span>保留时间、关键帧、停止等操作；需要点击放大按钮展开。</span>
+                <em>首次安装默认</em>
+              </button>
+              <button type="button" class="recorder-mode-option" :class="{ active: recorder.collapsedMode === 'capsule' }" @click="changeCollapsedMode('capsule')">
+                <b>胶囊模式</b>
+                <span>只展示牛马吃草和动态前进条；鼠标移入自动展开。</span>
+                <em>更轻巧</em>
+              </button>
+            </div>
+            <p class="muted mode-restart-hint">切换后会保存为下次启动设置，并自动重启牛马联盟。</p>
+          </div>
+          <div class="sub-card">
             <div class="sub-title">快捷键</div>
             <div v-for="(acc, name) in shortcuts" :key="name" class="compact-row">
               <span>{{ labelOf(name) }}</span><code>{{ acc || '未启用' }}</code>
@@ -210,6 +226,25 @@ async function setPrivacy(key, val) { await api('settings:set', { key: `privacy.
 async function setPrivacyList(key, val) { await setPrivacy(key, parseList(val)) }
 async function setModel(key, val) { await api('settings:set', { key: `model.${key}`, value: val }); model.value[key] = val }
 async function setRecorder(key, val) { await api('settings:set', { key: `recorder.${key}`, value: val }); recorder.value[key] = val }
+async function changeCollapsedMode(mode) {
+  const nextMode = mode === 'capsule' ? 'capsule' : 'mini'
+  const currentMode = recorder.value.collapsedMode === 'capsule' ? 'capsule' : 'mini'
+  if (nextMode === currentMode) return
+  const active = await api('ledger:current').catch(() => ({ entry: null }))
+  if (active.entry) {
+    await showAlert('切换收起形态需要重启应用。为避免中断当前台账，请先停止记录后再切换。', '正在记录')
+    return
+  }
+  const targetName = nextMode === 'capsule' ? '胶囊模式' : '小窗口模式'
+  const detail = nextMode === 'capsule'
+    ? '胶囊模式收起后只展示牛马吃草与动态前进条，鼠标移入会自动展开。'
+    : '小窗口模式收起后保留时间轴和操作按钮，需要点击放大按钮展开。'
+  const ok = await showConfirm(`${detail}\n\n切换到「${targetName}」后，牛马联盟会自动重启。是否继续？`, { title: '切换记录器收起形态', confirmText: '切换并重启' })
+  if (!ok) return
+  await api('settings:set', { key: 'recorder.collapsedMode', value: nextMode })
+  recorder.value.collapsedMode = nextMode
+  await api('lifecycle:restart').catch(() => {})
+}
 
 async function resetToken() {
   const ok = await showConfirm('重置后旧的局域网/Agent 访问令牌会失效，是否继续？', { title: '重置访问令牌', confirmText: '重置' })
@@ -312,6 +347,15 @@ onMounted(load)
 .setting-row p { margin-top: 4px; font-size: 12px; line-height: 1.5; }
 .sub-card { margin-top: 12px; padding: 12px; border: 1px solid rgba(255,255,255,.08); border-radius: 14px; background: rgba(0,0,0,.08); }
 .sub-title { color: var(--gold); font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+.recorder-mode-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.recorder-mode-option { position: relative; min-height: 112px; padding: 13px 14px; border: 1px solid rgba(255,255,255,.10); border-radius: 12px; background: rgba(255,255,255,.035); color: var(--text-main); text-align: left; cursor: pointer; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
+.recorder-mode-option:hover { border-color: rgba(224,188,114,.34); background: rgba(224,188,114,.07); transform: translateY(-1px); }
+.recorder-mode-option.active { border-color: rgba(224,188,114,.58); background: rgba(224,188,114,.13); box-shadow: inset 0 0 0 1px rgba(224,188,114,.12); }
+.recorder-mode-option b { display: block; margin-bottom: 7px; color: var(--text-main); font-size: 14px; }
+.recorder-mode-option span { display: block; padding-right: 44px; color: var(--text-dim); font-size: 12px; line-height: 1.55; }
+.recorder-mode-option em { position: absolute; top: 12px; right: 12px; padding: 2px 6px; border-radius: 999px; background: rgba(127,169,140,.12); color: var(--green); font-size: 10px; font-style: normal; }
+.recorder-mode-option.active::after { content: '已选择'; position: absolute; right: 12px; bottom: 10px; color: var(--gold); font-size: 10px; }
+.mode-restart-hint { margin-top: 9px; font-size: 11px; }
 .compact-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .form-grid label, .privacy-card label { display: flex; flex-direction: column; gap: 6px; color: var(--text-dim); font-size: 12px; }

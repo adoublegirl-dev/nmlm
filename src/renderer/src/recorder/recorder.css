@@ -22,7 +22,8 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
   font-display: swap;
   unicode-range: U+0020, U+0024-0025, U+0028-0029, U+002B-003A, U+00A0, U+00A3, U+00A5, U+20AC, U+2212, U+FFE5;
 }
-.recorder-shell { position: relative; width: 100vw; height: 100vh; color: var(--brown); font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+.recorder-shell { position: relative; width: 100vw; height: 100vh; color: var(--brown); font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; visibility: hidden; opacity: 0; }
+.recorder-shell.ready { visibility: visible; opacity: 1; }
 .recorder-shell::before { content: ''; position: absolute; z-index: 40; inset: 0; border: 1px solid var(--recorder-outline); border-radius: var(--recorder-radius); box-shadow: inset 0 0 0 1px rgba(255,255,255,.48); pointer-events: none; }
 .recorder { position: absolute; inset: 0; width: 100vw; height: 100vh; border: 0; border-radius: var(--recorder-radius); clip-path: inset(0 round var(--recorder-radius)); background: var(--paper); overflow: hidden; box-shadow: var(--recorder-shadow); }
 .recorder::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 28px; background: var(--paper-deep); z-index: 0; }
@@ -665,4 +666,95 @@ html, body { background: transparent !important; overflow: hidden; margin: 0; }
   50% { background: #e6dec3; box-shadow: 0 0 0 3px rgba(215, 180, 70, .22); }
 }
 .mini-mode-hint .minimize-toggle { animation: miniModeHintPulse .8s ease-in-out 3; }
+
+/* 收起形态：胶囊。只呈现吃草视频与动态前进条，不复用迷你窗口时间轴或按钮。 */
+.capsule-view { display: none; }
+.recorder-shell.mode-capsule:not(.collapsed) .minimize-toggle { display: none !important; }
+.recorder-shell.collapse-capsule.collapsed {
+  --recorder-radius: 27px;
+  width: 176px;
+  height: 54px;
+}
+.recorder-shell.collapse-capsule.collapsed::before {
+  border-color: rgba(224, 188, 114, .48);
+  border-radius: 27px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.10);
+}
+.recorder-shell.collapse-capsule.collapsed .recorder {
+  width: 176px;
+  height: 54px;
+  border: 0;
+  border-radius: 27px;
+  clip-path: inset(0 round 27px);
+  background: #172019;
+  box-shadow: 0 8px 22px rgba(20, 25, 20, .28);
+  transform: translateZ(0);
+}
+.recorder-shell.collapse-capsule.collapsed .capsule-view {
+  display: block;
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 176px;
+  height: 54px;
+  overflow: hidden;
+  border-radius: 27px;
+  pointer-events: none;
+}
+.capsule-graze-video {
+  position: absolute;
+  inset: -1px;
+  width: calc(100% + 2px);
+  height: calc(100% + 2px);
+  object-fit: cover;
+  object-position: center 62%;
+  pointer-events: none;
+  transform: translateZ(0);
+}
+.capsule-motion-progress {
+  position: absolute;
+  z-index: 2;
+  left: 15px;
+  right: 15px;
+  bottom: 5px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(250, 247, 236, .20);
+  box-shadow: 0 1px 2px rgba(0,0,0,.18);
+}
+.capsule-motion-progress span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -34%;
+  width: 34%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,244,204,.92) 48%, rgba(255,255,255,0));
+  filter: drop-shadow(0 0 3px rgba(244, 207, 122, .72));
+  animation: capsuleProgressTravel 1.9s linear infinite;
+  will-change: transform;
+}
+@keyframes capsuleProgressTravel {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(395%, 0, 0); }
+}
+.recorder-shell.collapse-capsule.collapsed .message-badge {
+  z-index: 8;
+  top: 8px;
+  left: 14px;
+  right: 14px;
+  width: auto;
+  max-width: none;
+  height: 38px;
+  min-height: 38px;
+  line-height: 32px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: rgba(32, 45, 34, .78);
+  color: #fffdf1;
+  text-shadow: 0 1px 2px rgba(0,0,0,.62);
+  transform: none;
+  backdrop-filter: blur(3px);
+}
 

@@ -3,6 +3,7 @@ const { BrowserWindow, screen } = require('electron')
 const path = require('path')
 const settings = require('./services/settings')
 const { EVENTS } = require('../shared/constants')
+const { RECORDER_WIDTH, RECORDER_HEIGHT, buildRecorderLayout } = require('./recorder-layout')
 
 let recorderWin = null
 let tagPickerWin = null
@@ -12,24 +13,8 @@ let recorderMessageSeq = 0
 let latestRecorderMessage = null
 let recorderMessageTimer = null
 
-const RECORDER_WIDTH = 280
-const RECORDER_HEIGHT = 390
-const RECORDER_COLLAPSED_WIDTH = 280
-const RECORDER_MESSAGE_WIDTH = RECORDER_COLLAPSED_WIDTH
-const RECORDER_COLLAPSED_HEIGHT = 168
-
 function recorderLayout() {
-  // 记录器按当前设计稿固定尺寸；历史配置中的尺寸字段不再生效。
-  const expandedWidth = RECORDER_WIDTH
-  const expandedHeight = RECORDER_HEIGHT
-  const displayMode = 'panel'
-  const panelWidth = RECORDER_COLLAPSED_WIDTH
-  const panelHeight = RECORDER_COLLAPSED_HEIGHT
-  const capsuleWidth = panelWidth
-  const capsuleHeight = panelHeight
-  const collapsedWidth = panelWidth
-  const collapsedHeight = panelHeight
-  return { expandedWidth, expandedHeight, displayMode, panelWidth, panelHeight, capsuleWidth, capsuleHeight, collapsedWidth, collapsedHeight }
+  return buildRecorderLayout(settings.get('recorder.collapsedMode'))
 }
 const DIST_URL = () => `http://127.0.0.1:${require('./services/settings').get('server.port')}`
 const APP_ICON = path.join(__dirname, 'assets/icon.ico')

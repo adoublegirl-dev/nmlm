@@ -12,6 +12,10 @@ app.innerHTML = `
     <div id="tagMenu" class="tag-menu hidden no-drag"></div>
     <div id="todoPanel" class="todo-panel hidden no-drag"></div>
     <div class="recorder">
+      <section id="capsuleView" class="capsule-view no-drag" aria-label="记录进行中">
+        <video id="capsuleHeroVideo" class="capsule-graze-video" src="${miniStageVideo}" muted loop playsinline preload="auto"></video>
+        <div class="capsule-motion-progress" aria-hidden="true"><span></span></div>
+      </section>
       <div class="titlebar">
         <div class="title">Niuma Recorder</div>
         <div class="title-actions no-drag">
@@ -96,7 +100,10 @@ let activeSegmentPicker = null
 let skipNextSegmentPickerOutsideClick = false
 let lastKeyframeTs = 0
 let initialRefresh = true
+let capsuleCollapseTimer = null
+let windowSyncPromise = Promise.resolve()
 const KEYFRAME_COOLDOWN_MS = 3000
+const CAPSULE_COLLAPSE_DELAY_MS = 5000
 
 function pad(n) { return String(n).padStart(2, '0') }
 function hms(sec) {
@@ -123,16 +130,19 @@ async function loadSettings() {
   renderLayoutClass()
 }
 
+function collapsedMode() {
+  return recorderSettings.collapsedMode === 'capsule' ? 'capsule' : 'mini'
+}
+function isCapsuleMode() { return collapsedMode() === 'capsule' }
 function renderLayoutClass() {
   const shell = document.querySelector('.recorder-shell')
-  const mode = 'panel'
-  const skin = 'mini'
-  shell.dataset.displayMode = mode
-  shell.dataset.capsuleSkin = skin
+  const mode = collapsedMode()
+  shell.dataset.collapsedMode = mode
   shell.classList.toggle('mode-capsule', mode === 'capsule')
-  shell.classList.toggle('mode-panel', mode !== 'capsule')
-  shell.classList.toggle('skin-horse', mode === 'capsule' && skin === 'horse')
-  shell.classList.toggle('skin-classic', mode === 'capsule' && skin === 'classic')
+  shell.classList.toggle('mode-panel', mode === 'mini')
+  shell.classList.toggle('collapse-capsule', mode === 'capsule')
+  shell.classList.toggle('collapse-mini', mode === 'mini')
+  if (mode !== 'capsule') clearCapsuleCollapseTimer()
   updateMotionState()
 }
 function updateMotionState() {
@@ -143,13 +153,18 @@ function updateMotionState() {
 
   const heroVideo = document.getElementById('heroVideo')
   const miniHeroVideo = document.getElementById('miniHeroVideo')
+  const capsuleHeroVideo = document.getElementById('capsuleHeroVideo')
   if (heroVideo) {
     if (!collapsed) heroVideo.play().catch(() => {})
     else heroVideo.pause()
   }
   if (miniHeroVideo) {
-    if (collapsed && current) miniHeroVideo.play().catch(() => {})
+    if (collapsed && current && !isCapsuleMode()) miniHeroVideo.play().catch(() => {})
     else miniHeroVideo.pause()
+  }
+  if (capsuleHeroVideo) {
+    if (collapsed && current && isCapsuleMode()) capsuleHeroVideo.play().catch(() => {})
+    else capsuleHeroVideo.pause()
   }
 }
 function formatTodoDue(ts) {
@@ -356,7 +371,10 @@ const miniTimeline = createMiniTimeline({
 function setMenu(open) {
   menuOpen = open
   if (!open) creatingTag = false
-  if (open) setCollapsed(false)
+  if (open) {
+    clearCapsuleCollapseTimer()
+    setCollapsed(false)
+  }
   const menu = document.getElementById('tagMenu')
   menu.classList.toggle('hidden', !open)
   menu.classList.remove('opening')
@@ -369,16 +387,36 @@ function setMenu(open) {
 }
 function setCollapsed(next, syncWindow = true, anchorMode = 'current') {
   if (menuOpen && next) return
-  const enteringMini = !collapsed && !!next
+  clearCapsuleCollapseTimer()
+  const enteringCollapsed = !collapsed && !!next
   if (collapsed !== !!next && segmentPickerOpen) closeSegmentTagPicker()
   collapsed = !!next
   document.querySelector('.recorder-shell').classList.toggle('collapsed', collapsed)
-  if (enteringMini && current) {
+  if (enteringCollapsed && current && !isCapsuleMode()) {
     const anchor = anchorMode === 'start' ? current.start_time : Date.now()
     miniTimeline.enter({ anchorTs: anchor, anchorRatio: anchorMode === 'start' ? 0.2 : 0.8 })
   }
   updateMotionState()
-  if (syncWindow) api('recorder:setCollapsed', { collapsed }).catch(() => {})
+  if (syncWindow) windowSyncPromise = api('recorder:setCollapsed', { collapsed }).catch(() => {})
+  return windowSyncPromise
+}
+function clearCapsuleCollapseTimer() {
+  clearTimeout(capsuleCollapseTimer)
+  capsuleCollapseTimer = null
+}
+function expandedOverlayOpen() {
+  const todoPanel = document.getElementById('todoPanel')
+  return menuOpen || segmentPickerOpen || (todoPanel && !todoPanel.classList.contains('hidden'))
+}
+function scheduleCapsuleCollapse() {
+  clearCapsuleCollapseTimer()
+  if (!isCapsuleMode() || collapsed || !current || expandedOverlayOpen()) return
+  capsuleCollapseTimer = setTimeout(() => {
+    const shell = document.querySelector('.recorder-shell')
+    if (!isCapsuleMode() || collapsed || !current || expandedOverlayOpen() || shell.matches(':hover')) return
+    setCollapsed(true, true, 'current')
+    render()
+  }, CAPSULE_COLLAPSE_DELAY_MS)
 }
 
 function showMessage(payload = {}) {
@@ -453,7 +491,7 @@ function render() {
     recordLabel.textContent = statusText
     toggleBtn.title = '打关键帧'
     toggleBtn.setAttribute('aria-label', '打关键帧')
-    hint.textContent = '记录中：可从标题栏切换到迷你模式'
+    hint.textContent = isCapsuleMode() ? '记录中：鼠标移出后自动收起为胶囊' : '记录中：可从标题栏切换到迷你模式'
   } else {
     timer.textContent = '00:00'
     stageTimer.textContent = '00:00'
@@ -501,6 +539,13 @@ async function toggleRecord() {
 }
 
 const shell = document.querySelector('.recorder-shell')
+shell.addEventListener('mouseenter', () => {
+  clearCapsuleCollapseTimer()
+  if (!isCapsuleMode() || !collapsed || !current) return
+  setCollapsed(false)
+  render()
+})
+shell.addEventListener('mouseleave', () => scheduleCapsuleCollapse())
 document.getElementById('tagButton').addEventListener('click', () => setMenu(!menuOpen))
 document.getElementById('settingsTopBtn').addEventListener('click', () => api('server:openBrowser').catch(() => {}))
 document.getElementById('minimizeTopBtn').addEventListener('click', async () => {
@@ -579,7 +624,13 @@ Promise.resolve()
   .then(loadSettings)
   .then(loadTags)
   .then(refresh)
+  .then(() => windowSyncPromise)
   .then(pollMessage)
+  .then(() => requestAnimationFrame(() => shell.classList.add('ready')))
+  .catch((error) => {
+    console.error('记录器初始化失败', error)
+    shell.classList.add('ready')
+  })
 
 setInterval(() => { refresh().catch(() => render()) }, 1000)
 setInterval(pollMessage, 500)
