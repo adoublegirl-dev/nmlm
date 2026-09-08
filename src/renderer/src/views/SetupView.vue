@@ -114,4 +114,16 @@ h1 { font-size: 26px; font-weight: 650; color: var(--gold); margin-bottom: 8px; 
 .toggle-row { display: flex; align-items: center; gap: 9px; color: var(--text-dim); font-size: 13px; }
 .shortcut-note { margin-top: 10px; padding: 12px 14px; border-radius: 9px; background: var(--gold-dim); color: var(--text-dim); font-size: 12px; }
 .setup-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+
+/* 草原启程向导皮肤 */
+.setup-mask { background: var(--overlay); backdrop-filter: blur(18px); }
+.setup-card { position: relative; border-color: var(--border-strong); background: var(--paper-strong); box-shadow: 0 28px 90px rgba(24,18,11,.42); }
+.setup-card::before { content: ''; position: absolute; left: 28px; right: 28px; top: 0; height: 3px; background: linear-gradient(90deg, transparent, var(--brass), transparent); }
+.setup-kicker { color: var(--green); font-family: Georgia, serif; font-weight: 700; }
+h1 { color: var(--brown); }
+.setup-step { border-color: var(--border); }
+.step-no { background: var(--gold-dim); color: var(--brown); border: 1px solid var(--border-strong); }
+.step-body h3 { color: var(--brown-text); }
+.step-body code { padding: 5px 8px; border-radius: 7px; background: var(--surface-soft); color: var(--green); }
+.shortcut-note { border: 1px solid var(--border); background: var(--gold-dim); color: var(--brown-text); }
 </style>

@@ -192,6 +192,12 @@
           <div v-else class="muted split-hint">进行中的记录请先完成，再校准起止时间。</div>
           <div class="edit-tags">
             <button
+              v-if="archivedTag(editForm.tagId)"
+              class="edit-tag active archived"
+              :style="{ '--c': archivedTag(editForm.tagId).color }"
+              disabled
+            >{{ archivedTag(editForm.tagId).name }}（已停用）</button>
+            <button
               v-for="t in tags" :key="t.id"
               class="edit-tag"
               :class="{ active: editForm.tagId === t.id }"
@@ -210,6 +216,7 @@
             <div v-for="p in editForm.timelinePoints" :key="p.id" class="point-edit-row">
               <input class="input point-time-input" type="datetime-local" step="1" v-model="p.timeValue" />
               <select class="input point-select" v-model.number="p.tagId">
+                <option v-if="archivedTag(p.tagId)" :value="p.tagId" disabled>{{ archivedTag(p.tagId).name }}（已停用）</option>
                 <option v-for="t in tags" :key="t.id" :value="t.id">{{ t.name }}</option>
               </select>
               <input class="input point-detail" v-model="p.detail" placeholder="节点文字记录" />
@@ -274,6 +281,7 @@ const totalSec = ref(0)
 const effectiveSec = ref(0)
 const fragments = ref(0)
 const tags = ref([])
+const allTags = ref([])
 const editEntry = ref(null)
 const editForm = ref({ tagId: null, detail: '', startValue: '', endValue: '', timelinePoints: [] })
 const manualOpen = ref(false)
@@ -601,17 +609,25 @@ function fromDateTimeInput(value) {
 function sameSecond(a, b) {
   return Math.floor(Number(a) / 1000) === Math.floor(Number(b) / 1000)
 }
+function archivedTag(id) {
+  const tag = allTags.value.find((item) => Number(item.id) === Number(id))
+  return tag && !tag.is_active ? tag : null
+}
 
 async function load({ focusWorkStart = false } = {}) {
   try {
     const start = startOfDay(curDate.value)
     const end = start + DAY_MS
-    const tagRes = await api('tags:list')
+    const [tagRes, allTagRes, r, pointsRes, eff] = await Promise.all([
+      api('tags:list'),
+      api('tags:listAll').catch(() => ({ tags: [] })),
+      api('ledger:list', { start, end }),
+      api('ledger:timelinePoints', { start, end }).catch(() => ({ points: [] })),
+      api('report:effectiveHours', { date: curDate.value })
+    ])
     tags.value = tagRes.tags || []
-    const tagMap = new Map(tags.value.map((t) => [t.id, t]))
-    const r = await api('ledger:list', { start, end })
-    const pointsRes = await api('ledger:timelinePoints', { start, end }).catch(() => ({ points: [] }))
-    const eff = await api('report:effectiveHours', { date: curDate.value })
+    allTags.value = allTagRes.tags?.length ? allTagRes.tags : tags.value
+    const tagMap = new Map(allTags.value.map((t) => [t.id, t]))
     const raw = (r.entries || []).slice().sort((a, b) => b.start_time - a.start_time)
     const pointsByEntry = new Map()
     for (const p of pointsRes.points || []) {
@@ -1213,4 +1229,58 @@ onBeforeUnmount(() => {
 .manual-head h3 { font-size: 17px; font-weight: 500; margin: 0 0 4px; color: var(--gold); }
 .manual-grid { display: grid; gap: 12px; }
 .manual-grid textarea { resize: vertical; font-family: inherit; }
+
+/* 草原工作台皮肤：结构与交互保持不变 */
+.ledger { display: flex; flex-direction: column; gap: 0; }
+.toolbar { min-height: 48px; margin-bottom: 18px; padding: 2px 2px 0; }
+.day-label { color: var(--brown); font-size: 17px; font-weight: 720; }
+.stats-row { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.stat { min-height: 76px; justify-content: center; padding: 11px 14px; border: 1px solid var(--border); border-radius: 14px; background: linear-gradient(145deg, rgba(255,255,255,.12), transparent), var(--bg-panel); box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255,255,255,.30); }
+.stat .v { color: var(--brown); font-size: 25px; line-height: 1.1; }
+.stat .l { margin-top: 5px; color: var(--text-dim); letter-spacing: .04em; }
+.cutdesk { padding: 18px; border-color: var(--border-strong); }
+.cutdesk::before { content: ''; position: absolute; left: 18px; right: 18px; top: 0; height: 2px; border-radius: 0 0 999px 999px; background: linear-gradient(90deg, transparent, var(--brass), transparent); opacity: .72; }
+.cutdesk-head h3, .section-title { color: var(--brown); font-weight: 700; }
+.zoom-tools { flex-wrap: wrap; justify-content: flex-end; }
+.zoom-btn { border-color: var(--border); background: color-mix(in srgb, var(--paper-strong) 74%, transparent); color: var(--brown-text); }
+.zoom-btn:hover { border-color: var(--border-strong); color: var(--brown); }
+.zoom-btn.active { color: var(--brown); border-color: var(--border-strong); background: var(--gold-dim); box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--brass) 58%, transparent); }
+.zoom-readout { color: var(--brown); }
+.day-timeline { border-color: color-mix(in srgb, var(--brown) 38%, transparent); background: var(--track-bg); box-shadow: inset 0 0 0 1px rgba(255,255,255,.035), inset 0 14px 36px rgba(0,0,0,.18); }
+.ruler { border-color: var(--track-line); background: rgba(255,255,255,.025); }
+.ruler-tick { background: rgba(247,231,198,.09); }
+.ruler-tick.minor { background: rgba(247,231,198,.045); }
+.ruler-tick.major { background: rgba(224,189,120,.24); }
+.ruler-tick span { color: rgba(248,237,215,.62); }
+.master-track { background: linear-gradient(180deg, rgba(255,255,255,.018), rgba(0,0,0,.12)); }
+.master-track::before { background: rgba(224,189,120,.16); }
+.master-track::after { background: rgba(158,180,141,.18); }
+.clip { background: color-mix(in srgb, var(--clip-color) 64%, #463b31); color: #fffaf0; border-color: color-mix(in srgb, var(--clip-color) 76%, #cbb58b); }
+.clip::before, .activity-clip::before { opacity: 0; }
+.cut-marker span, .track-marker { background: #332f29; color: #efd399; border-color: rgba(224,189,120,.40); }
+.track-marker.start, .track-marker.end, .track-marker.now { background: #2b2924; color: rgba(248,237,215,.68); border-color: rgba(248,237,215,.15); }
+.activity-lane-label, .now-line b { color: #b7c8a8; }
+.activity-clip { color: #e6f0df; border-color: rgba(168,188,153,.54); background: rgba(111,132,97,.20); }
+.activity-panel { border-color: color-mix(in srgb, var(--sage) 34%, transparent); background: color-mix(in srgb, var(--sage) 7%, var(--paper-strong)); }
+.activity-row { border-color: color-mix(in srgb, var(--sage) 34%, transparent); background: color-mix(in srgb, var(--sage) 8%, var(--paper-strong)); }
+.activity-kind { color: var(--green); border-color: color-mix(in srgb, var(--sage) 35%, transparent); background: color-mix(in srgb, var(--sage) 11%, transparent); }
+.detail-list { border-top-color: var(--border-strong); }
+.seg { border-radius: 10px; border-bottom: 1px solid color-mix(in srgb, var(--border) 64%, transparent); animation-name: detailPaperIn; animation-duration: .18s; animation-timing-function: ease-out; }
+@keyframes detailPaperIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
+.seg:hover { background: var(--surface-soft); }
+.seg.expanded { box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); }
+.date-chip, .cross-chip { color: var(--green); background: color-mix(in srgb, var(--sage) 11%, transparent); border-color: color-mix(in srgb, var(--sage) 28%, transparent); }
+.point-chip { color: var(--brown); background: var(--gold-dim); border-color: var(--border-strong); }
+.entry-track { background: var(--surface-soft); box-shadow: inset 0 0 0 1px var(--border); }
+.inline-edit { background: color-mix(in srgb, var(--paper-deep) 46%, transparent); }
+.edit-tag { border-color: var(--border); background: color-mix(in srgb, var(--c) 10%, var(--paper-strong)); color: var(--text-main); }
+.manual-mask { background: var(--overlay); }
+.manual-card { background: var(--paper-strong); border-color: var(--border-strong); }
+.manual-head h3, .point-editor h4 { color: var(--brown); }
+@media (max-width: 720px) {
+  .stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cutdesk-head { flex-direction: column; }
+  .zoom-tools { justify-content: flex-start; }
+  .point-edit-row { flex-wrap: wrap; }
+}
 </style>

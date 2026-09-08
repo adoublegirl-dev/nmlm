@@ -260,7 +260,7 @@ function convertToLedger({ start, end, tagId = null, detail = null } = {}) {
 }
 
 function findBreakTagId() {
-  const row = getDb().prepare('SELECT * FROM tags WHERE is_break = 1 ORDER BY sort_order, id LIMIT 1').get()
+  const row = getDb().prepare('SELECT * FROM tags WHERE is_break = 1 AND is_active = 1 ORDER BY sort_order, id LIMIT 1').get()
   return row ? row.id : (tagsRepo.findOtherTag()?.id || null)
 }
 

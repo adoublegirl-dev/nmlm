@@ -3,6 +3,7 @@ import stageVideo from '../assets/recorder-stage-video.webm'
 import miniStageVideo from '../assets/recorder-mini-video.webm'
 import timelineKeyframeIcon from '../assets/timeline-keyframe.svg'
 import { createMiniTimeline } from './timeline.js'
+import { resolveSelectedTagId } from './tag-selection.js'
 import { createIcons, ArrowLeft, ChevronDown, RefreshCw, X, ListTodo, Settings, Square, Plus, Trash2, Scissors, Maximize2, Minimize2 } from 'lucide'
 import './recorder.css'
 
@@ -182,14 +183,14 @@ async function saveSelectedTag(id) {
 async function loadTags() {
   const r = await api('tags:list')
   tags = (r.tags || []).slice().sort((a, b) => Number(a.created_at || 0) - Number(b.created_at || 0) || Number(a.id) - Number(b.id))
-  if (selectedTagId && !tags.some((t) => t.id === Number(selectedTagId))) selectedTagId = null
+  if (selectedTagId && !tags.some((t) => t.id === Number(selectedTagId))) await saveSelectedTag(null)
   renderTags()
 }
 function currentTag() { return tags.find((t) => t.id === Number(selectedTagId)) || null }
 function activeTag() {
-  const id = current?.active_tag_id || current?.tag_id
-  if (id) return tags.find((t) => t.id === Number(id)) || null
-  return currentTag()
+  const id = current?.active_tag_id ?? current?.tag_id
+  if (id != null) return tags.find((t) => t.id === Number(id)) || null
+  return current ? null : currentTag()
 }
 function selectedTag() { return Number(selectedTagId || 0) || null }
 
@@ -215,7 +216,7 @@ function renderTags() {
   const menu = document.getElementById('tagMenu')
   const selectedMenuTagId = current ? activeTag()?.id : selectedTagId
   const menuTitle = current ? '修改当前工作类型' : '选择工作类型'
-  const options = tags.map((t) => `<div class="tag-option-row ${Number(t.id) === Number(selectedMenuTagId) ? 'selected' : ''}"><button class="tag-option" data-id="${t.id}">${escapeHtml(t.name)}</button><button class="tag-delete" data-delete-id="${t.id}" title="删除类型" aria-label="删除${escapeHtml(t.name)}"><i data-lucide="trash-2" aria-hidden="true"></i></button></div>`).join('')
+  const options = tags.map((t) => `<div class="tag-option-row ${Number(t.id) === Number(selectedMenuTagId) ? 'selected' : ''}"><button class="tag-option" data-id="${t.id}">${escapeHtml(t.name)}</button>${t.name === '其他' ? '' : `<button class="tag-delete" data-delete-id="${t.id}" title="停用类型（历史记录保留）" aria-label="停用${escapeHtml(t.name)}"><i data-lucide="trash-2" aria-hidden="true"></i></button>`}</div>`).join('')
   const newOption = creatingTag ? '<input id="newTagInput" class="tag-option tag-option-input" maxlength="50" placeholder="新建类型按回车确认" aria-label="新建工作类型">' : ''
   menu.innerHTML = `<div class="tag-sheet"><div class="tag-sheet-head">${menuTitle}<button id="closeTagMenu" class="top-icon" aria-label="关闭"><i data-lucide="x"></i></button></div><div class="tag-options">${options || (!creatingTag ? '<div class="tag-empty">暂无工作类型</div>' : '')}${newOption}</div><button id="createTag" class="tag-create"><i data-lucide="plus" aria-hidden="true"></i><span>创建</span></button></div>`
   renderIcons(menu)
@@ -228,17 +229,22 @@ function renderTags() {
   menu.querySelectorAll('.tag-delete[data-delete-id]').forEach((button) => {
     button.addEventListener('click', async (event) => {
       event.stopPropagation()
+      if (current) return alert('正在记录中，请先停止记录后再停用工作类型')
       const id = Number(button.dataset.deleteId)
+      const tag = tags.find((item) => Number(item.id) === id)
+      if (!window.confirm(`停用工作类型“${tag?.name || ''}”？\n\n历史记录和统计会保留，停用后将不再出现在新记录选项中。`)) return
       try {
         await api('tags:delete', { id })
         if (Number(selectedTagId) === id) await saveSelectedTag(null)
-        await loadTags()
+        alert('工作类型已停用，牛马联盟将自动重启以同步所有窗口。')
+        await api('lifecycle:restart').catch(() => {})
       } catch (error) {
-        alert(error.message || '删除工作类型失败')
+        alert(error.message || '停用工作类型失败')
       }
     })
   })
   menu.querySelector('#createTag')?.addEventListener('click', () => {
+    if (current) return alert('正在记录中，请先停止记录后再创建工作类型')
     if (creatingTag) return
     creatingTag = true
     renderTags()
@@ -254,7 +260,8 @@ function renderTags() {
     try {
       await api('tags:create', { name })
       creatingTag = false
-      await loadTags()
+      alert('工作类型已创建，牛马联盟将自动重启以同步所有窗口。')
+      await api('lifecycle:restart').catch(() => {})
     } catch (error) {
       alert(error.message || '创建工作类型失败')
     }
@@ -374,6 +381,7 @@ function setMenu(open) {
   if (open) {
     clearCapsuleCollapseTimer()
     setCollapsed(false)
+    renderTags()
   }
   const menu = document.getElementById('tagMenu')
   menu.classList.toggle('hidden', !open)
@@ -450,7 +458,7 @@ async function refresh() {
   const hadCurrent = !!current
   current = r.entry || null
   if (current) {
-    if (current.tag_id) selectedTagId = current.tag_id
+    selectedTagId = resolveSelectedTagId(current, selectedTagId)
   } else {
     miniTimeline.setData(null)
     if (collapsed) setCollapsed(false)

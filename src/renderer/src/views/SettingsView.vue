@@ -79,7 +79,8 @@
               <input type="color" :value="t.color" @change="setTagColor(t, $event.target.value)" />
               <input class="input mini-input" type="number" min="0" max="9" :value="t.shortcut_key ?? ''" @change="setTagKey(t, $event)" />
               <label class="break-label"><input type="checkbox" :checked="!!t.is_break" @change="setTagBreak(t, $event.target.checked)" /> 离开</label>
-              <button class="btn mini danger" @click="deleteTag(t)">删除</button>
+              <button v-if="t.name !== '其他'" class="btn mini danger" @click="deleteTag(t)">停用</button>
+              <span v-else class="muted tag-protected">系统保留</span>
             </div>
             <div class="add-tag">
               <input v-model="newTag.name" class="input" placeholder="新标签名" @keyup.enter="addTag" />
@@ -138,11 +139,20 @@
           </div>
           <div class="setting-grid">
             <div class="setting-item wide"><span>API</span><code>{{ mcp.api || '…' }}</code></div>
-            <div class="setting-item wide"><span>启动脚本</span><code>{{ mcp.scriptPath || '…' }}</code></div>
+            <div class="setting-item wide"><span>标准启动命令</span><code>{{ mcp.launcher?.command || '…' }}</code></div>
           </div>
-          <textarea class="input mcp-config" readonly :value="mcp.configJson || ''" rows="10"></textarea>
-          <button class="btn primary" @click="copyMcpConfig">复制 MCP 配置</button>
-          <div class="muted hint">当前支持待办、台账查询、证据查询；证据导入暂不开放，避免污染证据库。</div>
+          <label class="mcp-profile-label">客户 Agent 配置格式
+            <select v-model="mcpProfileId" class="input">
+              <option v-for="profile in mcp.profileOptions || []" :key="profile.id" :value="profile.id">{{ profile.label }}</option>
+            </select>
+          </label>
+          <textarea class="input mcp-config" readonly :value="activeMcpConfigJson" rows="12"></textarea>
+          <div class="mcp-actions">
+            <button class="btn primary" @click="copyMcpConfig">复制当前格式</button>
+            <button class="btn" :disabled="mcpTesting" @click="testMcpConnection">{{ mcpTesting ? '检测中…' : '检测连接' }}</button>
+            <span v-if="mcpTestMessage" class="mcp-test-result" :class="{ ok: mcpTestOk, error: !mcpTestOk }">{{ mcpTestMessage }}</span>
+          </div>
+          <div class="muted hint">底层统一使用标准 stdio 协议，不依赖 PowerShell 或客户平台 SDK。当前支持待办、台账查询、证据查询；证据导入暂不开放。</div>
         </section>
 
         <section v-else-if="activeSection === 'model'" class="settings-section card">
@@ -187,12 +197,18 @@ const privacy = ref({})
 const model = ref({})
 const recorder = ref({})
 const mcp = ref({})
+const mcpProfileId = ref('mcpServers')
+const mcpTesting = ref(false)
+const mcpTestMessage = ref('')
+const mcpTestOk = ref(false)
 const tags = ref([])
 const newTag = ref({ name: '', color: '#e0bc72', key: null, isBreak: false })
 const recordingKey = ref(null)
 const recordingName = ref('')
 
 const maskedToken = computed(() => token.value ? token.value.slice(0, 6) + '••••' : '…')
+const activeMcpProfile = computed(() => (mcp.value.profiles || []).find((profile) => profile.id === mcpProfileId.value) || (mcp.value.profiles || [])[0] || null)
+const activeMcpConfigJson = computed(() => activeMcpProfile.value?.configJson || mcp.value.configJson || '')
 const LABELS = { start: '开始记录 / 打关键帧', stop: '停止记录', screenshot: '快捷截图', pack: '打包证据链', openPanel: '打开面板' }
 function labelOf(name) { return LABELS[name] || name }
 function parseList(value) { return String(value || '').split(/[\n,，]/).map((x) => x.trim()).filter(Boolean) }
@@ -257,19 +273,35 @@ async function resetToken() {
 async function setTagColor(t, color) { await api('tags:update', { id: t.id, color }); t.color = color }
 async function setTagKey(t, e) { const v = e.target.value === '' ? null : Number(e.target.value); await api('tags:update', { id: t.id, shortcutKey: v }); t.shortcut_key = v }
 async function setTagBreak(t, isBreak) { await api('tags:update', { id: t.id, isBreak: isBreak ? 1 : 0 }); t.is_break = isBreak ? 1 : 0 }
+async function canChangeTags() {
+  const active = await api('ledger:current').catch(() => ({ entry: null }))
+  if (!active.entry) return true
+  await showAlert('正在记录中。为避免标签状态和当前台账不一致，请先停止记录后再增删工作类型。', '正在记录')
+  return false
+}
 async function deleteTag(t) {
-  const ok = await showConfirm(`删除标签「${t.name}」？相关记录将变为未分类。`, { title: '删除标签', confirmText: '删除', danger: true })
+  if (!(await canChangeTags())) return
+  const ok = await showConfirm(`停用工作类型「${t.name}」？\n\n历史记录和统计会完整保留，但它将不再出现在新记录选项中。`, { title: '停用工作类型', confirmText: '停用', danger: true })
   if (!ok) return
-  await api('tags:delete', { id: t.id })
-  tags.value = tags.value.filter((x) => x.id !== t.id)
+  try {
+    await api('tags:delete', { id: t.id })
+    await showAlert('工作类型已停用，牛马联盟将自动重启以同步后台与记录器。')
+    await api('lifecycle:restart').catch(() => {})
+  } catch (error) {
+    await showAlert(error.message || '停用工作类型失败', '操作失败')
+  }
 }
 async function addTag() {
   const name = newTag.value.name.trim()
-  if (!name) return
-  await api('tags:create', { name, color: newTag.value.color, shortcutKey: newTag.value.key, isBreak: newTag.value.isBreak ? 1 : 0 })
-  newTag.value = { name: '', color: '#e0bc72', key: null, isBreak: false }
-  const tagRes = await api('tags:list')
-  tags.value = tagRes.tags || []
+  if (!name || !(await canChangeTags())) return
+  try {
+    await api('tags:create', { name, color: newTag.value.color, shortcutKey: newTag.value.key, isBreak: newTag.value.isBreak ? 1 : 0 })
+    newTag.value = { name: '', color: '#e0bc72', key: null, isBreak: false }
+    await showAlert('工作类型已添加，牛马联盟将自动重启以同步后台与记录器。')
+    await api('lifecycle:restart').catch(() => {})
+  } catch (error) {
+    await showAlert(error.message || '添加工作类型失败', '操作失败')
+  }
 }
 function openBrowser() { api('server:openBrowser') }
 function openScreenshotsDir() { api('app:openScreenshotsDir') }
@@ -282,13 +314,33 @@ async function migrateEvidenceDir() {
     await showAlert(`证据库迁移完成：${r.count || 0} 个文件。旧目录已保留。`)
   } catch (e) { await showAlert(`迁移失败：${e.message}`, '迁移失败') }
 }
-async function loadMcpConfig() { const r = await api('server:mcpConfig'); if (r.ok) mcp.value = r }
+async function loadMcpConfig() {
+  const r = await api('server:mcpConfig')
+  mcp.value = r
+  if (!(r.profiles || []).some((profile) => profile.id === mcpProfileId.value)) mcpProfileId.value = r.profiles?.[0]?.id || 'mcpServers'
+  mcpTestMessage.value = ''
+}
 async function copyMcpConfig() {
-  if (!mcp.value.configJson) await loadMcpConfig()
-  try { await navigator.clipboard.writeText(mcp.value.configJson || '') } catch (_) {
-    const ta = document.createElement('textarea'); ta.value = mcp.value.configJson || ''; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
+  if (!activeMcpConfigJson.value) await loadMcpConfig()
+  const text = activeMcpConfigJson.value
+  try { await navigator.clipboard.writeText(text) } catch (_) {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
   }
-  await showAlert('MCP 配置已复制')
+  await showAlert('当前 Agent 格式的 MCP 配置已复制')
+}
+async function testMcpConnection() {
+  mcpTesting.value = true
+  mcpTestMessage.value = ''
+  try {
+    const result = await api('server:mcpTest')
+    mcpTestOk.value = true
+    mcpTestMessage.value = `连接正常：已发现 ${result.toolCount} 个工具，桌面 API 可用`
+  } catch (error) {
+    mcpTestOk.value = false
+    mcpTestMessage.value = `连接失败：${error.message}`
+  } finally {
+    mcpTesting.value = false
+  }
 }
 function recordKey(name) { recordingName.value = name; recordingKey.value = true; window.addEventListener('keydown', onKeyDown, true) }
 async function onKeyDown(e) {
@@ -378,6 +430,42 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
 .privacy-card { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .privacy-card .sub-title { grid-column: 1 / -1; }
 .notice-box { margin-bottom: 12px; border: 1px solid rgba(127,169,140,.28); background: rgba(127,169,140,.10); color: var(--text-main); border-radius: 12px; padding: 10px 12px; font-size: 13px; }
-.mcp-config { width: 100%; min-height: 190px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; line-height: 1.5; resize: vertical; margin-bottom: 10px; }
+.mcp-profile-label { display: grid; gap: 6px; margin-bottom: 10px; color: var(--text-dim); font-size: 12px; }
+.mcp-config { width: 100%; min-height: 220px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; line-height: 1.5; resize: vertical; margin-bottom: 10px; }
+.mcp-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mcp-test-result { font-size: 12px; }
+.mcp-test-result.ok { color: var(--green); }
+.mcp-test-result.error { color: var(--danger); }
+.tag-protected { font-size: 11px; text-align: center; }
+/* 草原控制台皮肤 */
+.settings-hero { position: relative; min-height: 128px; align-items: center; border-color: var(--border-strong); background: linear-gradient(120deg, color-mix(in srgb, var(--paper-strong) 92%, transparent), color-mix(in srgb, var(--sage) 10%, var(--paper-deep))); box-shadow: var(--shadow); overflow: hidden; }
+.settings-hero::after { content: ''; position: absolute; top: 0; right: 0; width: 210px; height: 100%; opacity: .18; background: repeating-linear-gradient(135deg, var(--brown) 0 1px, transparent 1px 9px); -webkit-mask-image: linear-gradient(90deg, transparent, #000); mask-image: linear-gradient(90deg, transparent, #000); pointer-events: none; }
+.settings-hero h2 { color: var(--brown); font-size: 26px; }
+.eyebrow { color: var(--green); font-family: Georgia, serif; font-weight: 700; }
+.settings-nav { top: 86px; border-color: var(--border-strong); background: color-mix(in srgb, var(--paper-strong) 92%, transparent); }
+.settings-nav-item { color: var(--brown-text); }
+.settings-nav-item:hover { background: var(--surface-soft); color: var(--brown); }
+.settings-nav-item.active { background: var(--gold-dim); color: var(--brown); box-shadow: inset 3px 0 0 var(--brown), inset 0 0 0 1px var(--border); }
+.settings-nav-item span { width: 8px; height: 8px; flex: 0 0 8px; overflow: hidden; border-radius: 50%; background: var(--paper-muted); color: transparent; font-size: 0; box-shadow: inset 0 0 0 1px var(--border); }
+.settings-nav-item.active span { background: var(--brown); box-shadow: 0 0 0 3px var(--gold-dim); }
+.settings-section { border-color: var(--border-strong); background: var(--bg-panel); }
+.section-head { padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.section-head h3 { color: var(--brown); }
+.setting-item, .setting-row, .compact-row, .tag-row { border-color: var(--border); background: color-mix(in srgb, var(--paper-strong) 70%, var(--surface-soft)); }
+.sub-card { border-color: var(--border); background: color-mix(in srgb, var(--paper-deep) 38%, transparent); }
+.sub-title { color: var(--brown); }
+.recorder-mode-option { border-color: var(--border); background: color-mix(in srgb, var(--paper-strong) 84%, transparent); color: var(--text-main); }
+.recorder-mode-option:hover { border-color: var(--border-strong); background: var(--surface-soft); }
+.recorder-mode-option.active { border-color: var(--brown); background: var(--gold-dim); box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--brass) 64%, transparent); }
+.recorder-mode-option em { background: color-mix(in srgb, var(--sage) 12%, transparent); color: var(--green); }
+.recorder-mode-option.active::after { color: var(--brown); }
+code { color: var(--green); background: color-mix(in srgb, var(--sage) 9%, var(--paper-deep)); border: 1px solid color-mix(in srgb, var(--sage) 18%, transparent); }
+.switch i { background: var(--paper-muted); border-color: var(--border); }
+.switch i::after { background: var(--paper-strong); box-shadow: 0 1px 4px rgba(50,35,20,.18); }
+.switch input:checked + i { background: color-mix(in srgb, var(--brown) 34%, var(--paper-deep)); border-color: var(--border-strong); }
+.switch input:checked + i::after { background: var(--brown); }
+.color-dot { border-color: var(--paper-strong); box-shadow: 0 0 0 1px var(--border); }
+.notice-box { border-color: color-mix(in srgb, var(--sage) 32%, transparent); background: color-mix(in srgb, var(--sage) 10%, var(--paper-strong)); }
+@media (max-width: 1060px) and (min-width: 921px) { .settings-nav { top: 126px; } }
 @media (max-width: 920px) { .settings-layout { grid-template-columns: 1fr; } .settings-nav { position: static; flex-direction: row; flex-wrap: wrap; } .setting-grid, .form-grid, .privacy-card { grid-template-columns: 1fr; } .tag-row, .add-tag { grid-template-columns: 1fr; } }
 </style>

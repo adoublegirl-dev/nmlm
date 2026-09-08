@@ -5,19 +5,26 @@
       <div class="background-veils"></div>
     </div>
     <header class="topbar">
-      <div class="brand">牛马联盟</div>
-      <div class="status" :class="{ recording: recording }">
-        <span class="dot"></span>
-        <template v-if="recording">记录中 {{ currentTagName }} {{ sinceText }}</template>
-        <template v-else>今日有效 {{ effectiveText }}</template>
+      <div class="topbar-inner">
+        <div class="brand">
+          <span class="brand-scene" aria-hidden="true">
+            <video :src="pastureVideo" :poster="activeBackground" autoplay muted loop playsinline></video>
+          </span>
+          <span class="brand-copy"><b>牛马联盟</b><small>WORKDAY LEDGER</small></span>
+        </div>
+        <div class="status" :class="{ recording: recording }">
+          <span class="dot"></span>
+          <template v-if="recording">记录中 {{ currentTagName }} {{ sinceText }}</template>
+          <template v-else>今日有效 {{ effectiveText }}</template>
+        </div>
+        <nav class="nav">
+          <a v-for="item in navs" :key="item.key" :class="{ active: route === item.key }" :href="'#' + item.key">{{ item.label }}</a>
+        </nav>
+        <button class="theme-toggle" type="button" @click="toggleTheme">
+          <span class="theme-dot"></span>
+          {{ themeLabel }}
+        </button>
       </div>
-      <nav class="nav">
-        <a v-for="item in navs" :key="item.key" :class="{ active: route === item.key }" :href="'#' + item.key">{{ item.label }}</a>
-      </nav>
-      <button class="theme-toggle" type="button" @click="toggleTheme">
-        <span class="theme-dot"></span>
-        {{ themeLabel }}
-      </button>
     </header>
 
     <main class="content">
@@ -45,8 +52,8 @@ import TodosView from './views/TodosView.vue'
 import SettingsView from './views/SettingsView.vue'
 import SystemView from './views/SystemView.vue'
 import SetupView from './views/SetupView.vue'
-import dayBackground from './assets/background-day-cattle-horses.png'
-import nightBackground from './assets/background-night-cattle-horses.png'
+import pastureStill from './assets/recorder-active-video.png'
+import pastureVideo from './assets/recorder-mini-video.webm'
 
 const navs = [
   { key: 'ledger', label: '台账' },
@@ -60,6 +67,7 @@ const navs = [
 
 const savedTheme = localStorage.getItem('nmlm.panelTheme')
 const pastureTheme = ref(savedTheme === 'night' ? 'night' : 'day')
+document.documentElement.dataset.panelTheme = pastureTheme.value
 const route = ref(location.hash.replace('#', '') || 'ledger')
 const showSetup = ref(false)
 window.addEventListener('hashchange', () => {
@@ -88,11 +96,13 @@ const sinceText = computed(() => {
 const effectiveText = computed(() => formatDuration(effectiveSec.value))
 const themeClass = computed(() => `theme-pasture-${pastureTheme.value}`)
 const themeLabel = computed(() => pastureTheme.value === 'day' ? '白天牛马' : '夜晚牛马')
-const activeBackground = computed(() => pastureTheme.value === 'day' ? dayBackground : nightBackground)
+const activeBackground = computed(() => pastureStill)
 
 function toggleTheme() {
   pastureTheme.value = pastureTheme.value === 'day' ? 'night' : 'day'
+  document.documentElement.dataset.panelTheme = pastureTheme.value
   localStorage.setItem('nmlm.panelTheme', pastureTheme.value)
+  window.dispatchEvent(new CustomEvent('nmlm:theme-changed', { detail: { theme: pastureTheme.value } }))
 }
 
 async function refresh() {
@@ -142,158 +152,156 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   position: relative;
+  z-index: 0;
   overflow-x: hidden;
   color: var(--text-main);
-  transition: color .22s ease;
-}
-.layout.theme-pasture-day {
-  --bg-deep: #17201a;
-  --bg-panel: rgba(16, 29, 22, 0.54);
-  --bg-panel-solid: rgba(21, 37, 28, 0.72);
-  --bg-hover: rgba(236, 255, 226, 0.14);
-  --text-main: #f7f5e9;
-  --text-dim: rgba(229, 238, 211, 0.78);
-  --gold: #f0c76e;
-  --gold-dim: rgba(240, 199, 110, 0.18);
-  --green: #b9e3a5;
-  --border: rgba(237, 255, 228, 0.18);
-  --shadow: 0 16px 48px rgba(7, 23, 13, 0.36);
-}
-.layout.theme-pasture-night {
-  --bg-deep: #07101c;
-  --bg-panel: rgba(8, 15, 27, 0.62);
-  --bg-panel-solid: rgba(13, 22, 37, 0.82);
-  --bg-hover: rgba(178, 211, 255, 0.13);
-  --text-main: #eef5ff;
-  --text-dim: rgba(202, 218, 236, 0.74);
-  --gold: #d9c07a;
-  --gold-dim: rgba(217, 192, 122, 0.16);
-  --green: #9ec7ba;
-  --border: rgba(204, 226, 255, 0.16);
-  --shadow: 0 18px 52px rgba(0, 5, 15, 0.46);
+  transition: color .22s ease, background .22s ease;
 }
 .page-background {
   position: fixed;
   inset: 0;
-  z-index: -2;
-  background: var(--bg-deep);
+  z-index: -1;
   overflow: hidden;
+  background: #106bbf;
 }
 .page-background img {
   position: absolute;
-  inset: 0;
+  left: 0;
+  bottom: 0;
   width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transform: scale(1.02);
-  transition: opacity .28s ease, filter .28s ease;
+  height: auto;
+  object-fit: contain;
+  object-position: center bottom;
+  opacity: 1;
+  filter: saturate(.96) contrast(.96) brightness(1.03);
+  transition: filter .28s ease, opacity .28s ease;
 }
 .background-veils {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  background: none;
 }
-.theme-pasture-day .page-background img { filter: saturate(1.12) contrast(.98) brightness(1.02); }
-.theme-pasture-night .page-background img { filter: saturate(1.02) contrast(1.02) brightness(.96); }
-.theme-pasture-day .background-veils {
-  background:
-    radial-gradient(circle at 50% 18%, rgba(246, 255, 219, .12), transparent 38%),
-    linear-gradient(180deg, rgba(20, 39, 24, .06), rgba(11, 24, 17, .36) 64%, rgba(8, 18, 12, .52)),
-    linear-gradient(90deg, rgba(7, 20, 12, .22), rgba(7, 20, 12, .08) 30%, rgba(7, 20, 12, .08) 70%, rgba(7, 20, 12, .22));
-}
-.theme-pasture-night .background-veils {
-  background:
-    radial-gradient(circle at 52% 18%, rgba(177, 211, 255, .14), transparent 36%),
-    linear-gradient(180deg, rgba(3, 8, 18, .06), rgba(3, 8, 18, .42) 60%, rgba(2, 6, 12, .62)),
-    linear-gradient(90deg, rgba(1, 5, 14, .30), rgba(1, 5, 14, .12) 34%, rgba(1, 5, 14, .12) 66%, rgba(1, 5, 14, .30));
-}
+.theme-pasture-night .page-background { background: #0b2d4b; }
+.theme-pasture-night .page-background img { opacity: 1; filter: saturate(.66) contrast(1.03) brightness(.42) hue-rotate(7deg); }
+.theme-pasture-night .background-veils { background: none; }
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--paper-strong) 91%, transparent);
+  box-shadow: 0 9px 28px rgba(67,47,25,.12), inset 0 -1px 0 rgba(255,255,255,.35);
+  backdrop-filter: blur(18px) saturate(.92);
+}
+.topbar-inner {
+  width: min(1180px, 100%);
+  min-height: 48px;
+  margin: 0 auto;
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 14px 24px;
-  border-bottom: 0.5px solid var(--border);
-  background: color-mix(in srgb, var(--bg-panel-solid) 72%, transparent);
-  backdrop-filter: blur(18px) saturate(1.18);
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 50;
-  box-shadow: 0 10px 32px rgba(0,0,0,.12);
+  gap: 14px;
 }
-.brand { font-weight: 700; color: var(--gold); letter-spacing: 1px; text-shadow: 0 1px 14px rgba(0,0,0,.28); }
+.brand { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.brand-scene {
+  position: relative;
+  width: 58px;
+  height: 38px;
+  overflow: hidden;
+  border: 2px solid #6e5c49;
+  border-radius: 10px;
+  background: #262424;
+  box-shadow: inset 0 0 0 2px #262424, 0 4px 10px rgba(58,38,20,.18);
+}
+.brand-scene::after { content: ''; position: absolute; inset: 2px; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); pointer-events: none; }
+.brand-scene video { width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; transition: filter .22s ease; }
+.theme-pasture-night .brand-scene video { filter: brightness(.72) saturate(.72); }
+.brand-copy { display: flex; flex-direction: column; line-height: 1; }
+.brand-copy b { color: var(--brown); font-size: 16px; font-weight: 760; letter-spacing: .08em; }
+.brand-copy small { margin-top: 5px; color: var(--text-dim); font-family: Georgia, serif; font-size: 8px; letter-spacing: .17em; }
 .status {
+  min-height: 30px;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  padding: 4px 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-soft);
   color: var(--text-dim);
-  padding: 4px 12px;
-  border-radius: 20px;
-  background: var(--bg-panel-solid);
-  border: 0.5px solid var(--border);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+  font-size: 12px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.25);
 }
-.status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); }
-.status.recording { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 44%, transparent); }
-.status.recording .dot { background: var(--gold); box-shadow: 0 0 8px color-mix(in srgb, var(--gold) 58%, transparent); }
-.nav { display: flex; gap: 4px; margin-left: auto; }
+.status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--sage); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sage) 12%, transparent); }
+.status.recording { color: var(--brown); border-color: var(--border-strong); background: var(--gold-dim); }
+.status.recording .dot { background: var(--brown); box-shadow: 0 0 0 3px var(--gold-dim), 0 0 10px color-mix(in srgb, var(--brown) 36%, transparent); }
+.nav { display: flex; align-items: center; gap: 2px; margin-left: auto; }
 .nav a {
+  position: relative;
   color: var(--text-dim);
   text-decoration: none;
-  padding: 6px 14px;
-  border-radius: var(--radius);
+  padding: 8px 11px;
+  border-radius: 8px;
   font-size: 13px;
+  font-weight: 500;
+  transition: color .14s ease, background .14s ease;
 }
-.nav a:hover { background: var(--bg-hover); color: var(--text-main); }
-.nav a.active { background: var(--gold-dim); color: var(--gold); }
+.nav a::after { content: ''; position: absolute; left: 12px; right: 12px; bottom: 3px; height: 2px; border-radius: 999px; background: var(--brown); opacity: 0; transform: scaleX(.45); transition: opacity .14s ease, transform .14s ease; }
+.nav a:hover { background: var(--bg-hover); color: var(--brown); }
+.nav a:focus-visible, .theme-toggle:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+.nav a.active { background: var(--gold-dim); color: var(--brown); }
+.nav a.active::after { opacity: 1; transform: scaleX(1); }
 .theme-toggle {
+  min-height: 30px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  border: 0.5px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-panel-solid);
-  color: var(--text-main);
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--paper-strong);
+  color: var(--brown-text);
+  font-size: 11px;
   cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+  transition: background .14s ease, border-color .14s ease;
 }
-.theme-toggle:hover { background: var(--bg-hover); }
-.theme-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--green);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--green) 70%, transparent);
-}
-.theme-pasture-night .theme-dot { background: #b8d4ff; box-shadow: 0 0 12px rgba(184, 212, 255, .76); }
+.theme-toggle:hover { background: var(--paper-deep); border-color: var(--border-strong); }
+.theme-dot { width: 8px; height: 8px; border-radius: 50%; background: #d5a63f; box-shadow: 0 0 0 3px rgba(213,166,63,.13); }
+.theme-pasture-night .theme-dot { background: #a7b8a1; box-shadow: 0 0 0 3px rgba(167,184,161,.12), 0 0 9px rgba(167,184,161,.42); }
 .content {
   flex: 1;
   position: relative;
   isolation: isolate;
-  padding: 88px 24px 24px;
-  max-width: 1120px;
-  width: 100%;
+  width: min(1180px, 100%);
   margin: 0 auto;
+  padding: 24px 24px 44px;
 }
 .content::before {
   content: '';
   position: absolute;
-  inset: 12px 4px 24px;
   z-index: -1;
-  border-radius: 28px;
-  background: radial-gradient(circle at 50% 8%, rgba(255,255,255,.08), transparent 38%);
+  inset: 8px 4px 24px;
+  border-radius: 30px;
+  background: radial-gradient(circle at 50% 0, rgba(255,255,255,.16), transparent 42%);
   pointer-events: none;
 }
-@media (max-width: 980px) {
-  .topbar { flex-wrap: wrap; gap: 10px; }
-  .nav { order: 3; width: 100%; overflow-x: auto; margin-left: 0; }
+@media (max-width: 1060px) {
+  .topbar-inner { flex-wrap: wrap; row-gap: 8px; }
+  .nav { order: 3; width: 100%; margin-left: 0; overflow-x: auto; padding-top: 1px; }
 }
-@media (max-width: 820px) {
-  .content { padding: 16px; }
-  .page-background img { transform: scale(1.08); }
+@media (max-width: 720px) {
+  .topbar { padding: 8px 14px; }
+  .topbar-inner { gap: 9px; }
+  .brand-scene { width: 50px; height: 34px; }
+  .brand-copy small { display: none; }
+  .status { margin-left: auto; }
+  .theme-toggle { font-size: 0; padding: 5px 8px; }
+  .nav a { flex: 0 0 auto; padding: 7px 10px; }
+  .content { padding: 18px 14px 34px; }
+  .page-background img { width: auto; min-width: 100%; height: 58%; object-fit: cover; object-position: center bottom; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-background img, .nav a, .nav a::after, .theme-toggle, .brand-scene video { transition: none; }
 }
 </style>

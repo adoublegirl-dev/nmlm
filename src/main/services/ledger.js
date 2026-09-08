@@ -20,10 +20,12 @@ function activeSegmentTagId(entry) {
 
 function decorateCurrent(entry) { return entry ? { ...entry, active_tag_id: activeSegmentTagId(entry) } : null }
 
-function validTagId(tagId) {
+function validTagId(tagId, existingTagId = undefined) {
   if (tagId == null) return null
-  const t = tagsRepo.get(tagId)
-  return t ? tagId : null
+  if (tagsRepo.getActive(tagId)) return tagId
+  // 历史记录仍可在不改变其停用标签的前提下修改备注或时间。
+  if (existingTagId != null && Number(tagId) === Number(existingTagId) && tagsRepo.get(tagId)) return tagId
+  return null
 }
 
 function normalizeTimeRange({ startTime, endTime, now = Date.now() }) {
@@ -51,7 +53,7 @@ function isFragmentByDuration(durationSec) {
 async function finishEntry(entry, { tagId, detail, endTime = Date.now(), state = 'idle' } = {}) {
   const durationSec = Math.max(0, Math.floor((endTime - entry.start_time) / 1000))
   const win = await winUtil.getActiveWindow().catch(() => null)
-  const finalTagId = tagId !== undefined ? validTagId(tagId) : entry.tag_id
+  const finalTagId = tagId !== undefined ? validTagId(tagId, entry.tag_id) : entry.tag_id
   const finalDetail = detail !== undefined ? detail : entry.detail
   const updated = entriesRepo.finish(entry.id, {
     endTime,
@@ -162,7 +164,9 @@ function mergeAdjacentSameTagAround(entryId) {
 function retag(id, { tagId = null, detail = null } = {}) {
   const entry = entriesRepo.get(id)
   if (!entry) return { ok: false, error: '记录不存在' }
-  const updated = entriesRepo.updateMeta(id, { tagId: validTagId(tagId), detail: detail !== null ? detail : entry.detail })
+  const finalTagId = validTagId(tagId, entry.tag_id)
+  if (tagId != null && finalTagId == null) return { ok: false, error: '标签不存在或已停用' }
+  const updated = entriesRepo.updateMeta(id, { tagId: finalTagId, detail: detail !== null ? detail : entry.detail })
   const merged = mergeAdjacentSameTagAround(updated.id)
   return { ok: true, entry: merged || updated }
 }
@@ -241,7 +245,7 @@ function appendNodeNotes(detail, points = []) {
 function applyTimelinePointPlan({ entryId, points = [], baseTagId, detail, cleanupSameTagPoints = false } = {}) {
   const entry = entriesRepo.get(entryId)
   if (!entry) return { ok: false, error: '记录不存在' }
-  const finalBaseTagId = baseTagId !== undefined ? validTagId(baseTagId) : entry.tag_id
+  const finalBaseTagId = baseTagId !== undefined ? validTagId(baseTagId, entry.tag_id) : entry.tag_id
   if (baseTagId != null && finalBaseTagId == null) return { ok: false, error: '标签不存在' }
   const finalDetail = detail !== undefined ? detail : entry.detail
   const splitEnd = entry.end_time || Date.now()
@@ -252,9 +256,10 @@ function applyTimelinePointPlan({ entryId, points = [], baseTagId, detail, clean
     const idNum = Number(p.id)
     const isExisting = Number.isInteger(idNum) && existingIds.has(idNum)
     if (p.id != null && !String(p.id).startsWith('new-') && !isExisting) return { ok: false, error: '切点不存在' }
-    const finalTagId = validTagId(p.tagId)
-    if (p.tagId != null && finalTagId == null) return { ok: false, error: '标签不存在' }
-    const pointTs = p.ts !== undefined ? Number(p.ts) : (isExisting ? existing.find((x) => x.id === idNum)?.ts : NaN)
+    const existingPoint = isExisting ? existing.find((x) => x.id === idNum) : null
+    const finalTagId = validTagId(p.tagId, existingPoint?.tag_id)
+    if (p.tagId != null && finalTagId == null) return { ok: false, error: '标签不存在或已停用' }
+    const pointTs = p.ts !== undefined ? Number(p.ts) : existingPoint?.ts
     if (!Number.isFinite(pointTs)) return { ok: false, error: '切点时间格式不正确' }
     if (pointTs <= entry.start_time || pointTs >= splitEnd) return { ok: false, error: '切点必须位于记录开始和结束之间' }
     normalizedPoints.push({ id: isExisting ? idNum : null, ts: pointTs, tagId: finalTagId, detail: p.detail || null })

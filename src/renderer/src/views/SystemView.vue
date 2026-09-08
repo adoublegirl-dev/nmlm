@@ -145,4 +145,27 @@ h2 { font-size: 18px; font-weight: 500; margin-bottom: 3px; }
 .error-box { padding: 10px; border-radius: 8px; margin-top: 10px; }
 .progress { height: 6px; background: var(--bg-panel-solid); border-radius: 999px; overflow: hidden; margin-top: 12px; }
 .progress i { display: block; height: 100%; background: var(--green); transition: width .2s; }
+
+/* 草原设备间皮肤 */
+.page-head { min-height: 52px; margin-bottom: 18px; }
+h2 { color: var(--brown); font-size: 23px; font-weight: 760; }
+.section { padding: 18px; border-left: 3px solid var(--paper-muted); }
+.section:hover { border-left-color: var(--brass); }
+.section h3 { color: var(--brown); font-weight: 700; }
+.summary { border: 1px solid transparent; }
+.summary.ok { background: color-mix(in srgb, var(--sage) 12%, var(--paper-strong)); border-color: color-mix(in srgb, var(--sage) 28%, transparent); color: var(--green); }
+.summary.bad, .error-box { background: color-mix(in srgb, var(--danger) 10%, var(--paper-strong)); border-color: color-mix(in srgb, var(--danger) 28%, transparent); color: var(--danger); }
+.check-row, .row, .backup-row { border-bottom-color: var(--border); }
+.row code { color: var(--green); background: var(--surface-soft); padding: 3px 7px; border-radius: 6px; }
+.update-box { background: var(--surface-soft); border: 1px solid var(--border); }
+.error-box { border: 1px solid color-mix(in srgb, var(--danger) 28%, transparent); }
+.progress { height: 8px; background: var(--paper-deep); border: 1px solid var(--border); }
+.progress i { background: linear-gradient(90deg, var(--sage), var(--brass)); }
+@media (max-width: 720px) {
+  .page-head { flex-wrap: wrap; }
+  .check-row, .row, .backup-row { align-items: flex-start; flex-wrap: wrap; }
+  .check-row .detail { width: 100%; max-width: none; margin-left: 26px; text-align: left; }
+  .row > span:first-child { width: 88px; flex-basis: 88px; }
+  .url-input { min-width: 0; }
+}
 </style>

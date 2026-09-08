@@ -43,7 +43,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import * as echarts from 'echarts'
 import { api } from '../api'
 import { formatDuration } from '../utils/format'
@@ -58,6 +58,8 @@ const totalSec = ref(0)
 const fragmentCount = ref(0)
 const entryCount = ref(0)
 let charts = []
+const onResize = () => charts.forEach((c) => c.resize())
+const onThemeChanged = () => load()
 
 const effectiveText = ref('0s')
 const totalText = ref('0s')
@@ -78,6 +80,10 @@ function rangeOf(scope) {
   return { start: d.getTime(), end: d.getTime() + 31 * DAY_MS, month: d.getTime() }
 }
 
+function themeColor(name, fallback) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
+}
+
 async function load() {
   const { start, end, month } = rangeOf(scope.value)
   const [dist, trend, timeline] = await Promise.all([
@@ -93,23 +99,31 @@ async function load() {
   effectiveText.value = formatDuration(effectiveSec.value)
   totalText.value = formatDuration(totalSec.value)
 
+  const textMain = themeColor('--text-main', '#322b24')
+  const textDim = themeColor('--text-dim', '#7b6a57')
+  const paperStrong = themeColor('--paper-strong', '#fffdf5')
+  const border = themeColor('--border', 'rgba(122,87,47,.22)')
+  const brown = themeColor('--brown', '#925017')
+  const sage = themeColor('--green', '#627756')
+  const tooltip = { backgroundColor: paperStrong, borderColor: border, textStyle: { color: textMain } }
+
   const pie = echarts.getInstanceByDom(pieEl.value) || echarts.init(pieEl.value)
   pie.setOption({
-    tooltip: { trigger: 'item', formatter: '{b}: {c}s' },
+    tooltip: { trigger: 'item', formatter: '{b}: {c}s', ...tooltip },
     series: [{
       type: 'pie',
       radius: ['42%', '70%'],
-      label: { show: true, formatter: '{b}', color: '#e8e6e1' },
+      label: { show: true, formatter: '{b}', color: textMain },
       data: (dist.data || []).map((d) => ({ name: d.name, value: d.totalSec, itemStyle: { color: d.color } }))
     }]
   })
 
   const bar = echarts.getInstanceByDom(barEl.value) || echarts.init(barEl.value)
   bar.setOption({
-    tooltip: { trigger: 'axis', valueFormatter: (v) => formatDuration(v) },
+    tooltip: { trigger: 'axis', valueFormatter: (v) => formatDuration(v), ...tooltip },
     grid: { left: 40, right: 12, top: 20, bottom: 28 },
-    xAxis: { type: 'category', data: (dist.data || []).map((d) => d.name), axisLabel: { color: '#8f8a82' } },
-    yAxis: { type: 'value', axisLabel: { color: '#8f8a82' } },
+    xAxis: { type: 'category', data: (dist.data || []).map((d) => d.name), axisLabel: { color: textDim }, axisLine: { lineStyle: { color: border } } },
+    yAxis: { type: 'value', axisLabel: { color: textDim }, splitLine: { lineStyle: { color: border, type: 'dashed' } } },
     series: [{
       type: 'bar',
       barWidth: 22,
@@ -120,13 +134,13 @@ async function load() {
   const line = echarts.getInstanceByDom(lineEl.value) || echarts.init(lineEl.value)
   const trendData = trend.data || []
   line.setOption({
-    tooltip: { trigger: 'axis', valueFormatter: (v) => formatDuration(v) },
+    tooltip: { trigger: 'axis', valueFormatter: (v) => formatDuration(v), ...tooltip },
     grid: { left: 40, right: 12, top: 20, bottom: 28 },
-    xAxis: { type: 'category', data: trendData.map((d) => d.date), axisLabel: { color: '#8f8a82' } },
-    yAxis: { type: 'value', axisLabel: { color: '#8f8a82' } },
+    xAxis: { type: 'category', data: trendData.map((d) => d.date), axisLabel: { color: textDim }, axisLine: { lineStyle: { color: border } } },
+    yAxis: { type: 'value', axisLabel: { color: textDim }, splitLine: { lineStyle: { color: border, type: 'dashed' } } },
     series: [
-      { name: '有效', type: 'line', smooth: true, data: trendData.map((d) => d.effectiveSec), itemStyle: { color: '#d4af6a' } },
-      { name: '总时长', type: 'line', smooth: true, data: trendData.map((d) => d.totalSec), itemStyle: { color: '#8f8a82' } }
+      { name: '有效', type: 'line', smooth: true, data: trendData.map((d) => d.effectiveSec), itemStyle: { color: brown }, lineStyle: { width: 3, color: brown }, areaStyle: { color: `${brown}18` } },
+      { name: '总时长', type: 'line', smooth: true, data: trendData.map((d) => d.totalSec), itemStyle: { color: sage }, lineStyle: { width: 2, color: sage } }
     ]
   })
 
@@ -140,7 +154,14 @@ function setScope(s) {
 
 onMounted(() => {
   load()
-  window.addEventListener('resize', () => charts.forEach((c) => c.resize()))
+  window.addEventListener('resize', onResize)
+  window.addEventListener('nmlm:theme-changed', onThemeChanged)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onResize)
+  window.removeEventListener('nmlm:theme-changed', onThemeChanged)
+  charts.forEach((c) => c.dispose())
+  charts = []
 })
 </script>
 
@@ -157,5 +178,17 @@ onMounted(() => {
 .chart { height: 240px; }
 .chart.tall { height: 260px; }
 .report-actions { margin-top: 16px; display: flex; align-items: center; gap: 12px; }
-@media (max-width: 720px) { .charts { grid-template-columns: 1fr; } }
+/* 草原账簿报表皮肤 */
+.toolbar { min-height: 52px; margin-bottom: 18px; }
+.title h2 { color: var(--brown); font-size: 23px; font-weight: 760; }
+.scope { padding: 4px; border: 1px solid var(--border); border-radius: 12px; background: color-mix(in srgb, var(--paper-strong) 78%, transparent); }
+.metrics { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px; }
+.stat { min-height: 76px; justify-content: center; padding: 12px 14px; border: 1px solid var(--border); border-radius: 14px; background: linear-gradient(145deg, rgba(255,255,255,.10), transparent), var(--bg-panel); box-shadow: var(--shadow-soft); }
+.stat .v { color: var(--brown); font-size: 25px; }
+.stat .l { margin-top: 4px; }
+.charts { gap: 14px; margin-bottom: 14px; }
+.chart-box { padding: 18px; border-top-color: var(--border-strong); }
+.chart-box h3 { color: var(--brown-text); font-weight: 650; }
+.report-actions { padding: 12px 2px; }
+@media (max-width: 720px) { .charts { grid-template-columns: 1fr; } .metrics { grid-template-columns: repeat(2, 1fr); } }
 </style>

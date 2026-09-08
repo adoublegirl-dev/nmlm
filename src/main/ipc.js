@@ -9,8 +9,9 @@ const report = require('./services/report')
 const tools = require('./services/tools')
 const todos = require('./services/todos')
 const activity = require('./services/activity')
+const tagService = require('./services/tags')
 const windows = require('./windows')
-const { tagsRepo, packsRepo, settingsRepo } = require('./db')
+const { packsRepo, settingsRepo } = require('./db')
 const { DEFAULT_SETTINGS } = require('../shared/constants')
 
 const HANDLERS = {}
@@ -83,10 +84,11 @@ function registerAll() {
   registerHandler(IPC.LEDGER_MANUAL_CREATE, (a) => ledger.manualCreate(a))
 
   // tags
-  registerHandler(IPC.TAGS_LIST, () => ({ ok: true, tags: tagsRepo.all() }))
-  registerHandler(IPC.TAGS_CREATE, (a) => ({ ok: true, tag: tagsRepo.create(a) }))
-  registerHandler(IPC.TAGS_UPDATE, (a) => ({ ok: true, tag: tagsRepo.update(a.id, a) }))
-  registerHandler(IPC.TAGS_DELETE, (a) => ({ ok: true, removed: tagsRepo.remove(a.id) }))
+  registerHandler(IPC.TAGS_LIST, () => tagService.list())
+  registerHandler(IPC.TAGS_LIST_ALL, () => tagService.listAll())
+  registerHandler(IPC.TAGS_CREATE, (a) => tagService.create(a))
+  registerHandler(IPC.TAGS_UPDATE, (a) => tagService.update(a))
+  registerHandler(IPC.TAGS_DELETE, (a) => tagService.archive(a))
 
   // evidence
   registerHandler(IPC.EVIDENCE_CAPTURE, () => evidence.capture())
@@ -185,6 +187,7 @@ function registerAll() {
     return { ok: true }
   })
   registerHandler(IPC.SERVER_MCP_CONFIG, () => require('./services/mcpConfig').getMcpConfig())
+  registerHandler(IPC.SERVER_MCP_TEST, () => require('./services/mcpConfig').testMcpConnection())
 
   // app
   registerHandler(IPC.APP_OPEN_SCREENSHOTS_DIR, () => evidence.openScreenshotsDir())

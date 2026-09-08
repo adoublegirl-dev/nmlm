@@ -254,6 +254,15 @@ const MIGRATIONS = [
       INSERT INTO timeline_markers (entry_id, ts, created_at)
       SELECT entry_id, ts, created_at FROM pause_points;
     `
+  },
+  {
+    version: 11,
+    name: 'tag-soft-archive',
+    sql: `
+      ALTER TABLE tags ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE tags ADD COLUMN archived_at INTEGER;
+      CREATE INDEX IF NOT EXISTS idx_tags_active_sort ON tags(is_active, sort_order, id);
+    `
   }
 ]
 

@@ -217,7 +217,7 @@ async function onStartShortcut() {
   const windows = require('./windows')
   const { tagsRepo } = require('./db')
   const selected = settings.get('recorder.selectedTagId') || settings.get('mini.selectedTagId')
-  const tags = tagsRepo.all()
+  const tags = tagsRepo.allActive()
   const tag = tags.find((t) => t.id === Number(selected)) || tags[0]
   if (!tag) {
     const { Notification } = require('electron')

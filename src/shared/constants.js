@@ -21,6 +21,7 @@ const IPC = {
   LEDGER_MANUAL_CREATE: 'ledger:manualCreate',
   // tags
   TAGS_LIST: 'tags:list',
+  TAGS_LIST_ALL: 'tags:listAll',
   TAGS_CREATE: 'tags:create',
   TAGS_UPDATE: 'tags:update',
   TAGS_DELETE: 'tags:delete',
@@ -88,6 +89,7 @@ const IPC = {
   SERVER_INFO: 'server:info',
   SERVER_OPEN_BROWSER: 'server:openBrowser',
   SERVER_MCP_CONFIG: 'server:mcpConfig',
+  SERVER_MCP_TEST: 'server:mcpTest',
   // app
   APP_OPEN_SCREENSHOTS_DIR: 'app:openScreenshotsDir',
   APP_QUIT: 'app:quit',

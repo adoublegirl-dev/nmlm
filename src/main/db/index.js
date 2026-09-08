@@ -25,11 +25,18 @@ function getDb() {
 
 // ---------- 标签仓储 ----------
 const tagsRepo = {
+  // all() 保留停用标签，供历史台账和报表按原标签回溯。
   all() {
     return getDb().prepare('SELECT * FROM tags ORDER BY sort_order, id').all()
   },
+  allActive() {
+    return getDb().prepare('SELECT * FROM tags WHERE is_active = 1 ORDER BY sort_order, id').all()
+  },
   get(id) {
     return getDb().prepare('SELECT * FROM tags WHERE id = ?').get(id)
+  },
+  getActive(id) {
+    return getDb().prepare('SELECT * FROM tags WHERE id = ? AND is_active = 1').get(id)
   },
   getByName(name) {
     const normalized = String(name ?? '').trim()
@@ -39,15 +46,25 @@ const tagsRepo = {
   create({ name, color = '#D4AF6A', shortcutKey = null, isBreak = 0 } = {}) {
     const normalized = String(name ?? '').trim()
     if (!normalized) throw new Error('工作类型名称不能为空')
-    if (this.getByName(normalized)) throw new Error('已存在同名工作类型')
+    const existing = this.getByName(normalized)
+    if (existing?.is_active) throw new Error('已存在同名工作类型')
     const now = Date.now()
     const nextSortOrder = Number(getDb().prepare('SELECT COALESCE(MAX(sort_order), 0) + 1 AS value FROM tags').get()?.value || 1)
+    if (existing) {
+      getDb().prepare(`UPDATE tags
+        SET name = ?, color = ?, shortcut_key = ?, sort_order = ?, is_break = ?, is_active = 1, archived_at = NULL
+        WHERE id = ?`)
+        .run(normalized, color, shortcutKey, nextSortOrder, isBreak, existing.id)
+      return this.get(existing.id)
+    }
     const info = getDb()
-      .prepare('INSERT INTO tags (name, color, shortcut_key, sort_order, is_break, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .prepare('INSERT INTO tags (name, color, shortcut_key, sort_order, is_break, created_at, is_active, archived_at) VALUES (?, ?, ?, ?, ?, ?, 1, NULL)')
       .run(normalized, color, shortcutKey, nextSortOrder, isBreak, now)
     return this.get(info.lastInsertRowid)
   },
   update(id, patch) {
+    const current = this.getActive(id)
+    if (!current) throw new Error('工作类型不存在或已停用')
     const fields = []
     const vals = []
     const map = { name: 'name', color: 'color', shortcutKey: 'shortcut_key', isBreak: 'is_break', sortOrder: 'sort_order' }
@@ -57,17 +74,24 @@ const tagsRepo = {
         vals.push(patch[k])
       }
     }
-    if (!fields.length) return this.get(id)
+    if (!fields.length) return current
     vals.push(id)
     getDb().prepare(`UPDATE tags SET ${fields.join(', ')} WHERE id = ?`).run(...vals)
     return this.get(id)
   },
+  archive(id) {
+    const tag = this.getActive(id)
+    if (!tag) throw new Error('工作类型不存在或已停用')
+    if (tag.name === '其他') throw new Error('“其他”是系统兜底工作类型，不能停用')
+    getDb().prepare('UPDATE tags SET is_active = 0, archived_at = ? WHERE id = ?').run(Date.now(), id)
+    return this.get(id)
+  },
+  // 兼容旧调用名；语义已从物理删除改为停用。
   remove(id) {
-    getDb().prepare('UPDATE time_entries SET tag_id = NULL WHERE tag_id = ?').run(id)
-    getDb().prepare('DELETE FROM tags WHERE id = ?').run(id)
+    return this.archive(id)
   },
   findOtherTag() {
-    return getDb().prepare("SELECT * FROM tags WHERE name = '其他'").get()
+    return getDb().prepare("SELECT * FROM tags WHERE name = '其他' AND is_active = 1").get()
   }
 }
 

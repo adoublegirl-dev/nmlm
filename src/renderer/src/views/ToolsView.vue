@@ -123,4 +123,21 @@ onMounted(load)
 .form { width: 320px; display: flex; flex-direction: column; background: var(--bg-panel-solid); }
 .form h3 { margin-bottom: 12px; font-weight: 500; }
 .form-ops { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+/* 草原工具匣皮肤 */
+.toolbar { min-height: 52px; margin-bottom: 18px; }
+.title h2 { color: var(--brown); font-size: 23px; font-weight: 760; }
+.group { margin-bottom: 24px; }
+.group h3 { display: flex; align-items: center; gap: 8px; color: var(--brown-text); font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+.group h3::before { content: ''; width: 22px; height: 2px; border-radius: 999px; background: var(--brass); }
+.grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.tool { min-height: 112px; justify-content: center; border-top: 3px solid var(--paper-muted); background: var(--bg-panel); transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease; }
+.tool:hover { background: var(--paper-strong); border-top-color: var(--brass); transform: translateY(-2px); box-shadow: var(--shadow); }
+.tool-name { color: var(--brown); font-size: 15px; font-weight: 700; }
+.tool-url { color: var(--text-dim); }
+.tool-ops { opacity: .58; }
+.tool:hover .tool-ops { opacity: 1; }
+.mask { background: var(--overlay); backdrop-filter: blur(12px); }
+.form { background: var(--paper-strong); border-color: var(--border-strong); }
+.form h3 { color: var(--brown); font-size: 18px; font-weight: 700; }
 </style>

@@ -295,7 +295,7 @@ async function load() {
   const [r, ledgerRes, tagRes] = await Promise.all([
     api('evidence:list', { start, end }),
     api('ledger:list', { start, end }).catch(() => ({ entries: [] })),
-    api('tags:list').catch(() => ({ tags: [] }))
+    api('tags:listAll').catch(() => ({ tags: [] }))
   ])
   items.value = r.screenshots || r.items || []
   ledgerEntries.value = ledgerRes.entries || []
@@ -457,7 +457,30 @@ onMounted(() => {
 .review-box label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-dim); }
 .review-box textarea { resize: vertical; font-family: inherit; }
 .empty { text-align: center; padding: 40px 0; }
+/* 草原档案柜皮肤 */
+.toolbar { min-height: 52px; margin-bottom: 18px; }
+.title h2 { color: var(--brown); font-size: 23px; font-weight: 760; letter-spacing: .02em; }
+.notice { border-color: color-mix(in srgb, var(--sage) 30%, var(--border)); background: color-mix(in srgb, var(--sage) 8%, var(--paper-strong)); box-shadow: none; }
+.notice strong { color: var(--green); }
+.filters { padding: 10px; border: 1px solid var(--border); border-radius: 14px; background: color-mix(in srgb, var(--paper-strong) 82%, transparent); box-shadow: var(--shadow-soft); }
+.evidence-list { gap: 11px; }
+.evidence-item { border-left: 3px solid var(--paper-muted); background: var(--bg-panel); }
+.evidence-item:hover { transform: translateY(-2px); border-color: var(--brass); box-shadow: var(--shadow); }
+.thumb-wrap { border: 3px solid #403a33; border-radius: 11px; background: var(--track-bg); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+.file-icon { color: #efd399; }
+.item-title { color: var(--text-main); font-weight: 650; }
+.hash-line { color: color-mix(in srgb, var(--text-dim) 82%, transparent); }
+.status-chip, .legacy-chip { color: var(--brown); border-color: var(--border-strong); background: var(--gold-dim); }
+.legacy-chip { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 34%, transparent); background: var(--danger-soft); }
+.preview-mask { background: var(--overlay); backdrop-filter: blur(14px); }
+.preview-main { border: 1px solid rgba(246,232,201,.14); background: #1f211e; box-shadow: 0 24px 70px rgba(0,0,0,.32); }
+.preview-meta, .import-date-panel { background: var(--paper-strong); border-color: var(--border-strong); }
+.import-date-panel h3, .preview-meta h3, .review-box h4 { color: var(--brown); }
+.preview-file { color: #efd399; }
+.review-box { border-color: var(--border); }
 @media (max-width: 820px) {
+  .toolbar { align-items: flex-start; flex-wrap: wrap; }
+  .toolbar-actions { width: 100%; flex-wrap: wrap; }
   .evidence-item { grid-template-columns: 1fr; }
   .thumb-wrap { width: 100%; height: 160px; }
   .preview-panel { grid-template-columns: 1fr; height: 92vh; }

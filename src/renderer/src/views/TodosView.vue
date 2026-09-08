@@ -207,5 +207,24 @@ h2 { font-size:18px; font-weight:500; margin-bottom:2px; }
 .advanced-box { border:1px solid rgba(255,255,255,.09); border-radius:12px; padding:12px; background:rgba(255,255,255,.04); display:flex; flex-direction:column; gap:10px; }
 .toggle-row { display:flex; align-items:center; gap:8px; color:var(--text-main); font-size:13px; }
 .hint { font-size:12px; }
+/* 草原任务札记皮肤 */
+.toolbar { min-height: 52px; margin-bottom: 18px; }
+h2 { color: var(--brown); font-size: 23px; font-weight: 760; }
+.filters { padding: 8px; border: 1px solid var(--border); border-radius: 14px; background: color-mix(in srgb, var(--paper-strong) 82%, transparent); box-shadow: var(--shadow-soft); }
+.batch-bar { border-color: var(--border-strong); background: color-mix(in srgb, var(--brass) 10%, var(--paper-strong)); }
+.list { gap: 11px; }
+.todo { border-left: 3px solid var(--paper-muted); background: var(--bg-panel); transition: transform .14s ease, border-color .14s ease, box-shadow .14s ease; }
+.todo:hover { transform: translateY(-1px); border-left-color: var(--brass); box-shadow: var(--shadow); }
+.todo.overdue { border-color: color-mix(in srgb, var(--danger) 48%, var(--border)); border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 7%, var(--paper-strong)); }
+.todo-title { color: var(--text-main); }
+.status-chip, .phase-chip { border-color: var(--border); background: var(--surface-soft); }
+.status-chip.doing { color: var(--brown); border-color: var(--border-strong); background: var(--gold-dim); }
+.status-chip.done, .phase-chip { color: var(--green); border-color: color-mix(in srgb, var(--sage) 34%, transparent); background: color-mix(in srgb, var(--sage) 10%, transparent); }
+.dangerText, .error { color: var(--danger); }
+.mask { background: var(--overlay); backdrop-filter: blur(12px); }
+.form { background: var(--paper-strong); border-color: var(--border-strong); }
+.form h3 { color: var(--brown); font-size: 18px; font-weight: 700; }
+.advanced-toggle { border-color: var(--border-strong); color: var(--brown); background: var(--gold-dim); }
+.advanced-box { border-color: var(--border); background: var(--surface-soft); }
 @media (max-width: 760px) { .todo { grid-template-columns: 24px 1fr; } .ops { grid-column: 2; justify-content:flex-start; } .form { width:92vw; } .form-row { flex-direction:column; align-items:stretch; } }
 </style>
